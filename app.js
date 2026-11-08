@@ -822,14 +822,22 @@
   function clearMarqueeSelectionOnOutsidePointer(event) {
     if (event.button !== 0 || event.shiftKey) return;
     const target = event.target;
-    if (state.pianoSelectionFromMarquee && !target.closest(".piano-roll-note")) {
+    const pianoNote = target instanceof Element ? target.closest(".piano-roll-note") : null;
+    const clickedSelectedPianoNote = pianoNote &&
+      (state.selectedPianoNoteIds.has(pianoNote.dataset.noteId) || pianoNote.dataset.noteId === state.selectedPianoNoteId);
+    if (state.pianoSelectionFromMarquee && !clickedSelectedPianoNote) {
       state.selectedPianoNoteIds.clear();
       state.selectedPianoNoteId = null;
       state.pianoSelectionFromMarquee = false;
-      if (target.closest("#piano-roll-grid")) state.suppressPianoGridClick = true;
+      if (target instanceof Element && target.closest("#piano-roll-grid")) state.suppressPianoGridClick = true;
       document.querySelectorAll(".piano-roll-note").forEach((item) => item.classList.remove("is-selected"));
     }
-    if (state.arrangementSelectionFromMarquee && !target.closest("[data-selectable-type]")) {
+    const arrangementItem = target instanceof Element
+      ? target.closest("[data-selectable-type][data-clip-id]")
+      : null;
+    const clickedSelectedArrangementItem = arrangementItem && state.selectedArrangementItems.has(
+      arrangementSelectionKey(arrangementItem.dataset.selectableType, arrangementItem.dataset.clipId));
+    if (state.arrangementSelectionFromMarquee && !clickedSelectedArrangementItem) {
       state.selectedArrangementItems.clear();
       state.arrangementSelectionFromMarquee = false;
       updateArrangementSelection();
