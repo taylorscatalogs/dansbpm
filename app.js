@@ -51,7 +51,84 @@
     ],
   };
 
-  const LIBRARY_TRACKS = [
+  const DRUM_KIT_PROFILES = {
+    "909": { kick: "classic", snare: "classic", altSnare: "tight", clap: "classic", hat: "bright", pedalHat: "soft", openhat: "classic", cymbal: "shimmer", ride: "classic", rim: "high" },
+    "808": { kick: "deep", snare: "body", altSnare: "noise", clap: "room", hat: "soft", pedalHat: "soft", openhat: "dark", cymbal: "dark", ride: "shimmer", rim: "low" },
+    industrial: { kick: "industrial", snare: "metal", altSnare: "body", clap: "layered", hat: "vinyl", pedalHat: "vinyl", openhat: "wash", cymbal: "wash", ride: "shimmer", rim: "wood" },
+  };
+  const EXTRA_KIT_NAMES = [
+    "Vintage Room", "Neon House", "Dusty Breaks", "Jungle Circuit", "Lo-Fi Pocket", "Electro Pulse",
+    "Acoustic Studio", "Deep Minimal", "Chrome Machine", "Tape Drum Box", "Festival Stack", "Late Night",
+    "Analog Heat", "Broken Circuit", "Soft Focus", "Rave Signal", "Dub Echo", "Dry Studio",
+    "Midnight Drive", "Pocket Funk", "Heavy Weather", "Crystal Steps", "Basement Breaks", "Future Garage",
+  ];
+  const EXTRA_KIT_TRACKS = EXTRA_KIT_NAMES.map((name, index) => {
+    const id = `kit-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    DRUM_KIT_PROFILES[id] = {
+      kick: SOUND_VARIANTS.kick[(index * 2) % SOUND_VARIANTS.kick.length].id,
+      snare: SOUND_VARIANTS.snare[(index * 2 + 1) % SOUND_VARIANTS.snare.length].id,
+      altSnare: SOUND_VARIANTS.snare[(index * 3 + 2) % SOUND_VARIANTS.snare.length].id,
+      clap: SOUND_VARIANTS.clap[(index * 3) % SOUND_VARIANTS.clap.length].id,
+      hat: SOUND_VARIANTS.hat[index % SOUND_VARIANTS.hat.length].id,
+      pedalHat: SOUND_VARIANTS.hat[(index + 2) % SOUND_VARIANTS.hat.length].id,
+      openhat: SOUND_VARIANTS.openhat[(index * 3 + 1) % SOUND_VARIANTS.openhat.length].id,
+      cymbal: SOUND_VARIANTS.openhat[(index * 2 + 2) % SOUND_VARIANTS.openhat.length].id,
+      ride: SOUND_VARIANTS.openhat[(index + 1) % SOUND_VARIANTS.openhat.length].id,
+      rim: SOUND_VARIANTS.rim[(index * 3 + 1) % SOUND_VARIANTS.rim.length].id,
+    };
+    return {
+      id, name, kind: "drumkit", family: "Drum Kits", color: ["#ff9178", "#d3f36b", "#b5a0ff", "#78d2df"][index % 4],
+      volume: 0.72, patch: { kit: id },
+    };
+  });
+  const VOICE_FAMILIES = [
+    { family: "Synths", cutoff: 3600, names: ["Neon Saw", "Pulse Lead", "Sync Lead", "Hollow Square", "Vector Brass", "Digital Choir", "Drift Pad", "Orbit Sequence"] },
+    { family: "Bass", cutoff: 1150, names: ["Rubber Bass", "Reese Bass", "Mono Pulse", "Glass Sub", "Round Finger", "Dirty Square", "Deep Triangle", "Resonant Bass"] },
+    { family: "Keys", cutoff: 4800, names: ["Soft Bell Keys", "FM Tines", "Velvet Keys", "Digital EP", "Muted Chord", "Bright Mallet", "Lo-Fi Keys", "Wide Chimes"] },
+    { family: "Strings", cutoff: 4200, names: ["Slow Strings", "Pizzicato", "Glass Strings", "Warm Ensemble", "Short Spiccato", "Dream Section", "Dark Cello", "Airy Violin"] },
+    { family: "Brass", cutoff: 3400, names: ["Soft Trumpet", "Synth Horn", "Muted Brass", "Wide Trombone", "Bright Stabs", "Warm Tuba", "Glass Horn", "Brass Ensemble"] },
+    { family: "Winds", cutoff: 5200, names: ["Breathy Flute", "Reed Lead", "Soft Clarinet", "Air Recorder", "Hollow Oboe", "Woodwind Pad", "Bright Piccolo", "Warm Sax"] },
+    { family: "Guitars", cutoff: 3600, names: ["Nylon Guitar", "Chorus Electric", "Muted Pluck", "Glass Guitar", "Warm Twelve String", "Clean Chords", "Folk Picking", "Ambient Guitar"] },
+    { family: "Mallets", cutoff: 7000, names: ["Celesta", "Marimba", "Vibraphone", "Kalimba", "Music Box", "Soft Bells", "Steel Tongue", "Crystal Mallet"] },
+  ];
+  const VOICE_WAVES = ["triangle", "sine", "sawtooth", "square"];
+  const VOICE_COLORS = ["#7cc9ff", "#76c6ad", "#b5a0ff", "#f0ca75", "#78d2df", "#e2d3b1", "#d29b79", "#c5a6ed"];
+  const EXTRA_VOICE_TRACKS = VOICE_FAMILIES.flatMap((group, familyIndex) =>
+    group.names.map((name, index) => {
+      const id = `${group.family.toLowerCase()}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      const harmonic = index % 3 === 0 ? 2 + (index % 4) * 0.25 : undefined;
+      return {
+        id, name, kind: "instrument", family: group.family, color: VOICE_COLORS[(familyIndex + index) % VOICE_COLORS.length],
+        volume: group.family === "Bass" ? 0.68 : 0.62,
+        patch: {
+          wave: VOICE_WAVES[(familyIndex + index) % VOICE_WAVES.length],
+          cutoff: Math.max(220, Math.min(10000, group.cutoff * [0.55, 0.72, 0.9, 1, 1.18, 1.35, 1.55, 1.8][index])),
+          attack: [0.003, 0.008, 0.018, 0.04, 0.08, 0.14, 0.22, 0.012][(index + familyIndex) % 8],
+          decay: [0.12, 0.24, 0.42, 0.7, 0.9, 0.18, 0.34, 0.56][index],
+          sustain: [0.18, 0.32, 0.5, 0.68, 0.12, 0.42, 0.76, 0.25][(index + familyIndex) % 8],
+          release: [0.08, 0.14, 0.22, 0.34, 0.48, 0.62, 0.18, 0.28][(index + familyIndex) % 8],
+          detune: (index % 4) * 3,
+          ...(harmonic ? { harmonic, harmonicLevel: 0.1 + (index % 4) * 0.07 } : {}),
+        },
+      };
+    }),
+  );
+  const EXISTING_DRUM_VARIANTS = new Set([
+    "kick:deep", "kick:industrial", "snare:tight", "snare:metal", "clap:room",
+    "hat:vinyl", "openhat:wash", "rim:wood",
+  ]);
+  const DRUM_KIND_NAMES = { kick: "Kick", snare: "Snare", clap: "Clap", hat: "Closed Hat", openhat: "Open Hat", rim: "Rim" };
+  const EXTRA_DRUM_TRACKS = Object.entries(SOUND_VARIANTS).flatMap(([kind, variants]) =>
+    variants
+      .filter((variant) => !EXISTING_DRUM_VARIANTS.has(`${kind}:${variant.id}`))
+      .map((variant) => ({
+        id: `${kind}-${variant.id}`, name: `${variant.name} ${DRUM_KIND_NAMES[kind]}`, kind,
+        variant: variant.id, family: "Drums", color: VOICE_COLORS[Object.keys(SOUND_VARIANTS).indexOf(kind) % VOICE_COLORS.length],
+        volume: kind === "kick" ? 0.72 : kind === "snare" ? 0.58 : 0.42,
+      })),
+  );
+
+  const BASE_LIBRARY_TRACKS = [
     { id: "kick-808", name: "808 Sub Kick", kind: "kick", variant: "deep", family: "Drums", color: "#b8dc67", volume: 0.72 },
     { id: "kick-industrial", name: "Industrial Kick", kind: "kick", variant: "industrial", family: "Drums", color: "#d48b68", volume: 0.72 },
     { id: "snare-tight", name: "Tight Snare", kind: "snare", variant: "tight", family: "Drums", color: "#e58b7a", volume: 0.58 },
@@ -78,6 +155,12 @@
     { id: "bass-finger", name: "Finger Bass", kind: "instrument", family: "Bass", color: "#89ad75", volume: 0.72, patch: { wave: "triangle", cutoff: 950, attack: 0.008, decay: 0.22, sustain: 0.35, release: 0.13, harmonic: 2, harmonicLevel: 0.16 } },
     { id: "bass-sub", name: "Sub Bass", kind: "instrument", family: "Bass", color: "#78a6d4", volume: 0.72, patch: { wave: "sine", cutoff: 420, attack: 0.01, decay: 0.2, sustain: 0.48, release: 0.16 } },
     { id: "bass-fuzz", name: "Fuzz Bass", kind: "instrument", family: "Bass", color: "#d47e78", volume: 0.68, patch: { wave: "sawtooth", cutoff: 1500, attack: 0.004, decay: 0.18, sustain: 0.32, release: 0.12, detune: 5 } },
+  ];
+  const LIBRARY_TRACKS = [
+    ...BASE_LIBRARY_TRACKS,
+    ...EXTRA_DRUM_TRACKS,
+    ...EXTRA_KIT_TRACKS,
+    ...EXTRA_VOICE_TRACKS,
   ].map((track) => ({ ...track, libraryOnly: true, subtitle: track.family }));
 
   const PRESETS = [
@@ -183,6 +266,15 @@
     recordingStream: null,
     recordingChunks: [],
     recordingStartBar: 0,
+    recordingCountdownTimer: null,
+    recordingMetronomeTimer: null,
+    recordingClickIndex: 0,
+    nextRecordingClickTime: 0,
+    workspacePlayers: {
+      arrangement: null,
+      sequencer: null,
+      "piano-roll": null,
+    },
   };
 
   const $ = (selector) => document.querySelector(selector);
@@ -1429,7 +1521,7 @@
     return getStepDuration();
   }
 
-  function scheduleStep(step, time, pattern = null, loopIndex = null) {
+  function scheduleStep(step, time, pattern = null, loopIndex = null, updatePlayhead = true) {
     const activeTracks = pattern
       ? state.tracks.filter((track) => getPatternTrackIds(pattern).includes(track.id))
       : state.tracks;
@@ -1443,6 +1535,7 @@
         triggerTrack(track, time, step, variant, getNoteDuration(pattern || getPattern()));
       }
     });
+    if (!updatePlayhead) return;
     const displayDelay = Math.max(0, (time - state.audioContext.currentTime) * 1000);
     const timerId = window.setTimeout(() => {
       state.stepTimers.delete(timerId);
@@ -1474,7 +1567,7 @@
       if (arrangementPlayback) {
         arrangementSteps.forEach(({ pattern, step: patternStep }) =>
           scheduleStep(patternStep, state.nextStepTime + swingOffset, pattern));
-        if (state.metronome && clockStep % 8 === 0) {
+        if (state.metronome && state.recordingMetronomeTimer === null && clockStep % 8 === 0) {
           triggerClick(state.nextStepTime + swingOffset, clockStep % 32 === 0);
         }
       } else if (state.view === "sequencer") {
@@ -1488,7 +1581,7 @@
           const loopIndex = Math.floor(absoluteTick / patternTicks);
           scheduleStep(Math.floor(clockStep / ticksPerGridStep) % gridStepCount, state.nextStepTime + swingOffset, pattern, loopIndex);
         }
-        if (state.metronome && clockStep % 8 === 0) {
+        if (state.metronome && state.recordingMetronomeTimer === null && clockStep % 8 === 0) {
           triggerClick(state.nextStepTime, clockStep % 32 === 0);
         }
       }
@@ -1498,8 +1591,8 @@
     if (pianoLoopPlayback) scheduleCurrentMelLoop(lookAhead);
   }
 
-  function arrangementStepsAtTime(time) {
-    const barPosition = state.playbackStartBar + (time - state.playbackStartTime) / (240 / state.bpm);
+  function arrangementStepsAtTime(time, startTime = state.playbackStartTime, startBar = state.playbackStartBar) {
+    const barPosition = startBar + (time - startTime) / (240 / state.bpm);
     return state.patternClips.flatMap((clip) => {
       const pattern = getPattern(clip.patternId);
       const clipBars = pattern ? pattern.steps / 16 * (clip.repeatCount || 1) : 0;
@@ -1534,6 +1627,164 @@
         playPianoNote(instrument, when, note.midi, duration, note.velocity || 0.8);
         state.scheduledPianoNotes.add(key);
       }
+    });
+  }
+
+  const WORKSPACE_PLAY_BUTTONS = {
+    arrangement: "arrangement-workspace-play-button",
+    sequencer: "sequencer-workspace-play-button",
+    "piano-roll": "piano-workspace-play-button",
+  };
+
+  function updateWorkspacePlayButton(workspace, playing) {
+    const button = $(`#${WORKSPACE_PLAY_BUTTONS[workspace]}`);
+    button.textContent = playing ? "Stop" : "Play";
+    button.setAttribute("aria-label", `${playing ? "Stop" : "Play"} ${workspace === "piano-roll" ? "piano roll" : workspace} workspace`);
+    button.setAttribute("aria-pressed", String(playing));
+    button.classList.toggle("is-active", playing);
+  }
+
+  function stopWorkspacePlayback(workspace) {
+    const player = state.workspacePlayers[workspace];
+    if (!player) return;
+    if (player.timerId !== null) window.clearInterval(player.timerId);
+    player.timerId = null;
+    player.sources.forEach((source) => {
+      try { source.stop(); } catch { /* The source may have ended between scheduler ticks. */ }
+    });
+    player.sources.clear();
+    player.scheduledMelNotes.clear();
+    state.workspacePlayers[workspace] = null;
+    updateWorkspacePlayButton(workspace, false);
+  }
+
+  function stopAllWorkspacePlayers() {
+    Object.keys(WORKSPACE_PLAY_BUTTONS).forEach(stopWorkspacePlayback);
+  }
+
+  async function toggleWorkspacePlayback(workspace) {
+    const existingPlayer = state.workspacePlayers[workspace];
+    if (existingPlayer) {
+      stopWorkspacePlayback(workspace);
+      return;
+    }
+    const player = {
+      timerId: null,
+      sources: new Set(),
+      scheduledMelNotes: new Set(),
+      startTime: 0,
+      nextStepTime: 0,
+      stepIndex: 0,
+      startBar: 0,
+      endTime: Infinity,
+    };
+    state.workspacePlayers[workspace] = player;
+    updateWorkspacePlayButton(workspace, true);
+    try {
+      await ensureAudio();
+      if (state.workspacePlayers[workspace] !== player) return;
+      player.startTime = state.audioContext.currentTime + 0.04;
+      player.nextStepTime = player.startTime;
+      if (workspace === "arrangement") {
+        player.startBar = Math.min(state.arrangementCursor, state.arrangementBars - 1);
+        player.endTime = player.startTime + (state.arrangementBars - player.startBar) * (240 / state.bpm);
+        scheduleArrangementClips(player.startTime, player.startBar, player);
+      }
+      updateWorkspacePlayButton(workspace, true);
+      workspacePlaybackScheduler(workspace);
+      player.timerId = window.setInterval(() => workspacePlaybackScheduler(workspace), 25);
+    } catch (error) {
+      if (state.workspacePlayers[workspace] === player) {
+        stopWorkspacePlayback(workspace);
+        showToast(error.message || "Workspace audio could not start.");
+      }
+    }
+  }
+
+  function workspacePlaybackScheduler(workspace) {
+    const player = state.workspacePlayers[workspace];
+    if (!player || !state.audioContext) return;
+    const now = state.audioContext.currentTime;
+    const lookAhead = 0.12;
+    if (workspace === "arrangement" && now >= player.endTime) {
+      stopWorkspacePlayback(workspace);
+      return;
+    }
+    while (
+      player.nextStepTime < now + lookAhead &&
+      (workspace !== "arrangement" || player.nextStepTime < player.endTime)
+    ) {
+      const clockStep = player.stepIndex;
+      if (workspace === "arrangement") {
+        arrangementStepsAtTime(player.nextStepTime, player.startTime, player.startBar)
+          .forEach(({ pattern, step }) => scheduleStep(step, player.nextStepTime, pattern, null, false));
+        scheduleWorkspaceArrangementMelNotes(player, now, lookAhead);
+      } else if (workspace === "sequencer") {
+        const pattern = getPattern();
+        if (pattern) {
+          const ticksPerGridStep = getGridTicksPerStep(pattern);
+          if (clockStep % ticksPerGridStep === 0) {
+            const gridStep = Math.floor(clockStep / ticksPerGridStep) % getGridStepCount(pattern);
+            scheduleStep(gridStep, player.nextStepTime, pattern, null, false);
+          }
+        }
+      } else {
+        scheduleWorkspaceMelLoop(player, now, lookAhead);
+      }
+      if (state.metronome && state.recordingMetronomeTimer === null && clockStep % 8 === 0) {
+        triggerClick(player.nextStepTime, clockStep % 32 === 0);
+      }
+      player.nextStepTime += getSchedulerTickDuration();
+      const cycleTicks = workspace === "sequencer" ? (getPattern()?.steps || state.steps) * 2 : 32;
+      player.stepIndex = (clockStep + 1) % cycleTicks;
+    }
+  }
+
+  function scheduleWorkspaceMelLoop(player, now, lookAhead) {
+    const mel = getMel();
+    const instrument = getPianoTrack();
+    if (!mel || !instrument) return;
+    const secondsPerBar = 240 / state.bpm;
+    const loopSeconds = getMelLengthBars(mel) * secondsPerBar;
+    const firstLoop = Math.max(0, Math.floor((now - player.startTime) / loopSeconds));
+    mel.notes.forEach((note) => {
+      for (let loop = firstLoop; loop <= firstLoop + 1; loop += 1) {
+        const key = `${note.id}:${loop}`;
+        const when = player.startTime + loop * loopSeconds + note.startTick / PIANO_TICKS_PER_BAR * secondsPerBar;
+        if (player.scheduledMelNotes.has(key) || when < now || when >= now + lookAhead) continue;
+        playPianoNote(instrument, when, note.midi, note.durationTicks / PIANO_TICKS_PER_BAR * secondsPerBar, note.velocity || 0.8);
+        player.scheduledMelNotes.add(key);
+      }
+    });
+    const nextLoop = firstLoop + 1;
+    if (player.scheduledMelNotes.size > mel.notes.length * 3) {
+      player.scheduledMelNotes = new Set([...player.scheduledMelNotes].filter((key) => key.endsWith(`:${firstLoop}`) || key.endsWith(`:${nextLoop}`)));
+    }
+  }
+
+  function scheduleWorkspaceArrangementMelNotes(player, now, lookAhead) {
+    const secondsPerBar = 240 / state.bpm;
+    const hasMelSolo = state.melTracks.some((track) => track.solo);
+    const hasInstrumentSolo = state.tracks.some((track) => track.solo);
+    state.melTracks.forEach((melTrack) => {
+      const instrument = getPianoTrack(melTrack.instrumentId);
+      if (!instrument || melTrack.muted || (hasMelSolo && !melTrack.solo) ||
+        instrument.muted || (hasInstrumentSolo && !instrument.solo)) return;
+      melTrack.clips.forEach((clip) => {
+        const mel = getMel(clip.melId);
+        if (!mel) return;
+        const clipEndBar = clip.startBar + getMelLengthBars(mel);
+        mel.notes.forEach((note) => {
+          const key = `${melTrack.id}:${clip.id}:${note.id}`;
+          const noteStartBar = clip.startBar + note.startTick / PIANO_TICKS_PER_BAR;
+          const noteEndBar = Math.min(clipEndBar, noteStartBar + note.durationTicks / PIANO_TICKS_PER_BAR);
+          const audibleStartBar = Math.max(player.startBar, noteStartBar);
+          const when = player.startTime + (audibleStartBar - player.startBar) * secondsPerBar;
+          if (player.scheduledMelNotes.has(key) || noteEndBar <= audibleStartBar || when < now || when >= now + lookAhead) return;
+          playPianoNote(instrument, when, note.midi, (noteEndBar - audibleStartBar) * secondsPerBar, note.velocity || 0.8);
+          player.scheduledMelNotes.add(key);
+        });
+      });
     });
   }
 
@@ -2529,10 +2780,80 @@
     }
   }
 
+  function stopRecordingMetronome() {
+    if (state.recordingMetronomeTimer !== null) window.clearInterval(state.recordingMetronomeTimer);
+    state.recordingMetronomeTimer = null;
+  }
+
+  function startRecordingMetronome() {
+    stopRecordingMetronome();
+    state.recordingClickIndex = 0;
+    state.nextRecordingClickTime = state.audioContext.currentTime + 0.02;
+    const scheduleClicks = () => {
+      while (state.nextRecordingClickTime < state.audioContext.currentTime + 0.12) {
+        triggerClick(state.nextRecordingClickTime, state.recordingClickIndex % 4 === 0);
+        state.recordingClickIndex += 1;
+        state.nextRecordingClickTime += 60 / state.bpm;
+      }
+    };
+    scheduleClicks();
+    state.recordingMetronomeTimer = window.setInterval(scheduleClicks, 25);
+  }
+
+  function resetRecordingControls() {
+    $("#record-audio-button").classList.remove("is-recording");
+    $("#record-audio-button").disabled = false;
+    $("#record-audio-button").setAttribute("aria-pressed", "false");
+    $("#record-button-label").textContent = "Record input";
+  }
+
+  function cancelRecordingCountdown() {
+    if (state.recordingCountdownTimer !== null) window.clearTimeout(state.recordingCountdownTimer);
+    state.recordingCountdownTimer = null;
+    stopRecordingMetronome();
+    state.recordingStream?.getTracks().forEach((track) => track.stop());
+    state.recordingStream = null;
+    state.mediaRecorder = null;
+    resetRecordingControls();
+    showToast("Recording cancelled before it started.");
+  }
+
+  function startRecordingAfterCountIn(recorder) {
+    let beatsRemaining = 4;
+    const countBeat = () => {
+      beatsRemaining -= 1;
+      if (beatsRemaining === 0) {
+        state.recordingCountdownTimer = null;
+        try {
+          state.recordingStartBar = Math.ceil(state.arrangementCursor) + 1;
+          recorder.start();
+          $("#record-button-label").textContent = "Stop recording";
+          showToast(`Recording from bar ${state.recordingStartBar + 1}`);
+        } catch (error) {
+          stopRecordingMetronome();
+          state.recordingStream?.getTracks().forEach((track) => track.stop());
+          state.recordingStream = null;
+          state.mediaRecorder = null;
+          resetRecordingControls();
+          showToast(`Could not start recording: ${error.message || "unknown error"}`);
+        }
+        return;
+      }
+      $("#record-button-label").textContent = `Count-in ${beatsRemaining}`;
+      state.recordingCountdownTimer = window.setTimeout(countBeat, 60000 / state.bpm);
+    };
+    state.recordingCountdownTimer = window.setTimeout(countBeat, 60000 / state.bpm);
+  }
+
   async function toggleAudioRecording() {
+    if (state.recordingCountdownTimer !== null) {
+      cancelRecordingCountdown();
+      return;
+    }
     if (state.mediaRecorder?.state === "recording") {
       $("#record-audio-button").disabled = true;
       $("#record-button-label").textContent = "Saving recording…";
+      stopRecordingMetronome();
       state.mediaRecorder.stop();
       return;
     }
@@ -2541,10 +2862,12 @@
       return;
     }
     try {
+      $("#record-audio-button").disabled = true;
+      $("#record-button-label").textContent = "Requesting mic…";
       const stream = await window.navigator.mediaDevices.getUserMedia({ audio: true });
       state.recordingStream = stream;
+      await ensureAudio();
       state.recordingChunks = [];
-      state.recordingStartBar = state.arrangementCursor;
       const mimeType = window.MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
       const recorder = new window.MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       state.mediaRecorder = recorder;
@@ -2553,15 +2876,14 @@
       });
       recorder.addEventListener("error", () => showToast("Microphone recording stopped because of an error."));
       recorder.addEventListener("stop", async () => {
+        state.recordingCountdownTimer = null;
+        stopRecordingMetronome();
         stream.getTracks().forEach((track) => track.stop());
         state.recordingStream = null;
         state.mediaRecorder = null;
         const chunks = state.recordingChunks;
         state.recordingChunks = [];
-        $("#record-audio-button").classList.remove("is-recording");
-        $("#record-audio-button").disabled = false;
-        $("#record-audio-button").setAttribute("aria-pressed", "false");
-        $("#record-button-label").textContent = "Record input";
+        resetRecordingControls();
         const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
         if (!blob.size) {
           showToast("No audio was captured.");
@@ -2575,16 +2897,21 @@
           showToast(`Could not add recording: ${error.message || "unknown error"}`);
         }
       });
-      recorder.start();
       $("#record-audio-button").classList.add("is-recording");
       $("#record-audio-button").disabled = false;
       $("#record-audio-button").setAttribute("aria-pressed", "true");
-      $("#record-button-label").textContent = "Stop recording";
-      showToast(`Recording from bar ${state.recordingStartBar + 1}`);
+      $("#record-button-label").textContent = "Count-in 4";
+      startRecordingMetronome();
+      startRecordingAfterCountIn(recorder);
+      showToast("Count-in: 4 beats before recording starts");
     } catch (error) {
+      stopRecordingMetronome();
+      if (state.recordingCountdownTimer !== null) window.clearTimeout(state.recordingCountdownTimer);
+      state.recordingCountdownTimer = null;
       state.recordingStream?.getTracks().forEach((track) => track.stop());
       state.recordingStream = null;
       state.mediaRecorder = null;
+      resetRecordingControls();
       showToast(`Microphone unavailable: ${error.message || "permission was denied"}`);
     }
   }
@@ -2908,12 +3235,7 @@
 
   function playDrumKitNote(track, time, midi, duration, velocity) {
     const kit = track.patch?.kit || "909";
-    const kits = {
-      "909": { kick: "classic", snare: "classic", altSnare: "tight", clap: "classic", hat: "bright", pedalHat: "soft", openhat: "classic", cymbal: "shimmer", ride: "classic", rim: "high" },
-      "808": { kick: "deep", snare: "body", altSnare: "noise", clap: "room", hat: "soft", pedalHat: "soft", openhat: "dark", cymbal: "dark", ride: "shimmer", rim: "low" },
-      industrial: { kick: "industrial", snare: "metal", altSnare: "body", clap: "layered", hat: "vinyl", pedalHat: "vinyl", openhat: "wash", cymbal: "wash", ride: "shimmer", rim: "wood" },
-    };
-    const sounds = kits[kit] || kits["909"];
+    const sounds = DRUM_KIT_PROFILES[kit] || DRUM_KIT_PROFILES["909"];
     const scale = Math.max(0.25, Math.min(4, duration / getStepDuration()));
     const context = state.audioContext;
     const noteGain = state.audioContext.createGain();
@@ -3147,8 +3469,9 @@
     }
   }
 
-  function scheduleArrangementClips(startTime, startBar) {
+  function scheduleArrangementClips(startTime, startBar, player = null) {
     const secondsPerBar = 240 / state.bpm;
+    const sources = player?.sources || state.arrangementSources;
     state.arrangementTracks.forEach((track) => {
       ensureArrangementTrackAudio(track);
       track.clips.forEach((clip) => {
@@ -3158,11 +3481,12 @@
         const source = state.audioContext.createBufferSource();
         source.buffer = clip.buffer;
         source.connect(track.gainNode);
-        source.onended = () => state.arrangementSources.delete(source);
+        source.onended = () => sources.delete(source);
         source.start(when, offset);
-        state.arrangementSources.add(source);
+        sources.add(source);
       });
     });
+    if (player) return;
     const hasMelSolo = state.melTracks.some((track) => track.solo);
     const hasInstrumentSolo = state.tracks.some((track) => track.solo);
     state.melTracks.forEach((melTrack) => {
@@ -3451,6 +3775,7 @@
       return;
     }
     if (state.isPlaying) stopPlayback();
+    stopAllWorkspacePlayers();
     const previousProjectId = state.projectId;
     state.projectId = projectId;
     try {
@@ -3471,6 +3796,7 @@
       showToast("Could not save this project; a new project was not created.");
       return;
     }
+    stopAllWorkspacePlayers();
     const project = {
       id: makeId(),
       name: `New Project ${state.projects.length + 1}`,
@@ -3959,6 +4285,9 @@
 
   function bindEvents() {
     playButton.addEventListener("click", () => state.isPlaying ? stopPlayback() : startPlayback());
+    Object.entries(WORKSPACE_PLAY_BUTTONS).forEach(([workspace, buttonId]) => {
+      $(`#${buttonId}`).addEventListener("click", () => toggleWorkspacePlayback(workspace));
+    });
     $("#stop-button").addEventListener("click", stopPlayback);
     $("#tempo-control").addEventListener("click", () => {
       const entry = window.prompt("Set tempo (60–180 BPM)", String(state.bpm));
@@ -4178,6 +4507,7 @@
     $("#reset-session").addEventListener("click", () => {
       if (!window.confirm("Reset this session to the starter pattern?")) return;
       stopPlayback();
+      stopAllWorkspacePlayers();
       state.tracks.filter((track) => track.sample || track.kind === "sample").forEach((track) => {
         deletePersistedDrumSample(track.id).catch(() => showToast(`Could not remove saved sample ${track.name}.`));
       });

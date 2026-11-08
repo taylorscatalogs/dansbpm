@@ -110,6 +110,7 @@ h1 { margin: 9px 0 4px; font-size: 28px; font-weight: 600; letter-spacing: -1.05
 .quiet-button { display: flex; align-items: center; gap: 7px; height: 32px; border: 1px solid var(--stroke); border-radius: 6px; background: #1a1b1e; padding: 0 10px; color: #b4b5ba; font-size: 11px; cursor: pointer; }
 .quiet-button:hover { background: var(--panel-hover); color: var(--text); }
 .quiet-button svg { width: 14px; height: 14px; }
+.workspace-play-button.is-active { border-color: #687641; background: var(--accent-soft); color: var(--accent); }
 .keyboard-record-button.is-recording { border-color: #db625e; background: rgba(219,98,94,.12); color: #ff918b; }
 .keyboard-record-button.is-recording::before { width: 7px; height: 7px; border-radius: 50%; background: currentColor; content: ""; }
 

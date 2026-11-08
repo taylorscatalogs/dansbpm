@@ -99,6 +99,7 @@
               <h1>Arrangement</h1>
             </div>
             <div class="arrangement-actions">
+              <button class="quiet-button workspace-play-button" id="arrangement-workspace-play-button" type="button" aria-label="Play arrangement workspace" aria-pressed="false">Play</button>
               <button class="quiet-button" id="source-browser-button" type="button">Browser</button>
               <label class="pattern-select-control">
                 <span>PATTERN</span>
@@ -160,6 +161,7 @@
                           <div class="eyebrow">STEP <span class="heading-dot"></span> <span id="bar-label">1 BAR</span></div>
                         </div>
                         <div class="sequencer-actions">
+                          <button class="quiet-button workspace-play-button" id="sequencer-workspace-play-button" type="button" aria-label="Play step sequencer workspace" aria-pressed="false">Play</button>
                           <label class="pattern-select-control">
                             <span>PATTERN</span>
                             <select id="sequencer-pattern-select" aria-label="Select pattern to edit"></select>
@@ -220,6 +222,7 @@
                     </section>
                     <section class="piano-roll-view" id="piano-roll-view" role="tabpanel" aria-labelledby="piano-roll-tab" hidden>
                       <div class="piano-roll-toolbar">
+                        <button class="quiet-button workspace-play-button" id="piano-workspace-play-button" type="button" aria-label="Play piano roll workspace" aria-pressed="false">Play</button>
                         <label class="pattern-select-control">
                           <span>MEL</span>
                           <select id="mel-select" aria-label="Select a Mel"></select>
@@ -308,7 +311,7 @@
         <dialog class="source-browser-dialog" id="source-browser-dialog" aria-label="Instrument and audio browser">
           <aside class="source-sidebar">
             <div class="source-sidebar-heading">SOURCES <button id="source-browser-close" type="button" aria-label="Close browser">×</button></div>
-            <div class="source-section-label instrument-section-label">SOUND LIBRARY <span id="drum-sound-count">32</span></div>
+            <div class="source-section-label instrument-section-label">SOUND LIBRARY <span id="drum-sound-count">138</span></div>
             <button class="source-add-button" id="import-drum-sounds-button" type="button">＋ Import drum sounds</button>
             <div class="instrument-browser" id="instrument-browser"></div>
             <div class="source-section-label recordings-section-label">RECORDINGS <span id="recording-source-count">0</span></div>
