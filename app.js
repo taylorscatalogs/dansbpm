@@ -1685,6 +1685,7 @@
       if (state.workspacePlayers[workspace] !== player) return;
       player.startTime = state.audioContext.currentTime + 0.04;
       player.nextStepTime = player.startTime;
+      updateTrackGains();
       if (workspace === "arrangement") {
         player.startBar = Math.min(state.arrangementCursor, state.arrangementBars - 1);
         player.endTime = player.startTime + (state.arrangementBars - player.startBar) * (240 / state.bpm);
@@ -1692,7 +1693,14 @@
       }
       updateWorkspacePlayButton(workspace, true);
       workspacePlaybackScheduler(workspace);
-      player.timerId = window.setInterval(() => workspacePlaybackScheduler(workspace), 25);
+      player.timerId = window.setInterval(() => {
+        try {
+          workspacePlaybackScheduler(workspace);
+        } catch (error) {
+          stopWorkspacePlayback(workspace);
+          showToast(error.message || "Workspace playback stopped unexpectedly.");
+        }
+      }, 25);
     } catch (error) {
       if (state.workspacePlayers[workspace] === player) {
         stopWorkspacePlayback(workspace);
