@@ -271,7 +271,6 @@
     recordingClickIndex: 0,
     nextRecordingClickTime: 0,
     workspacePlayers: {
-      arrangement: null,
       sequencer: null,
       "piano-roll": null,
     },
@@ -1521,7 +1520,7 @@
     return getStepDuration();
   }
 
-  function scheduleStep(step, time, pattern = null, loopIndex = null, updatePlayhead = true) {
+  function scheduleStep(step, time, pattern = null, loopIndex = null, updatePlayhead = true, highlightPlayer = null) {
     const activeTracks = pattern
       ? state.tracks.filter((track) => getPatternTrackIds(pattern).includes(track.id))
       : state.tracks;
@@ -1535,13 +1534,16 @@
         triggerTrack(track, time, step, variant, getNoteDuration(pattern || getPattern()));
       }
     });
-    if (!updatePlayhead) return;
+    if (!updatePlayhead && !highlightPlayer) return;
+    const playheadTimers = highlightPlayer?.playheadTimers || state.stepTimers;
     const displayDelay = Math.max(0, (time - state.audioContext.currentTime) * 1000);
     const timerId = window.setTimeout(() => {
-      state.stepTimers.delete(timerId);
-      if (state.isPlaying) setPlayhead(step);
+      playheadTimers.delete(timerId);
+      if (highlightPlayer
+        ? state.workspacePlayers.sequencer === highlightPlayer && !(state.isPlaying && state.view === "sequencer")
+        : state.isPlaying) setPlayhead(step);
     }, displayDelay);
-    state.stepTimers.add(timerId);
+    playheadTimers.add(timerId);
   }
 
   function scheduler() {
@@ -1591,8 +1593,8 @@
     if (pianoLoopPlayback) scheduleCurrentMelLoop(lookAhead);
   }
 
-  function arrangementStepsAtTime(time, startTime = state.playbackStartTime, startBar = state.playbackStartBar) {
-    const barPosition = startBar + (time - startTime) / (240 / state.bpm);
+  function arrangementStepsAtTime(time) {
+    const barPosition = state.playbackStartBar + (time - state.playbackStartTime) / (240 / state.bpm);
     return state.patternClips.flatMap((clip) => {
       const pattern = getPattern(clip.patternId);
       const clipBars = pattern ? pattern.steps / 16 * (clip.repeatCount || 1) : 0;
@@ -1631,7 +1633,6 @@
   }
 
   const WORKSPACE_PLAY_BUTTONS = {
-    arrangement: "arrangement-workspace-play-button",
     sequencer: "sequencer-workspace-play-button",
     "piano-roll": "piano-workspace-play-button",
   };
@@ -1649,12 +1650,11 @@
     if (!player) return;
     if (player.timerId !== null) window.clearInterval(player.timerId);
     player.timerId = null;
-    player.sources.forEach((source) => {
-      try { source.stop(); } catch { /* The source may have ended between scheduler ticks. */ }
-    });
-    player.sources.clear();
+    player.playheadTimers.forEach((timerId) => window.clearTimeout(timerId));
+    player.playheadTimers.clear();
     player.scheduledMelNotes.clear();
     state.workspacePlayers[workspace] = null;
+    if (workspace === "sequencer" && !(state.isPlaying && state.view === "sequencer")) setPlayhead(-1);
     updateWorkspacePlayButton(workspace, false);
   }
 
@@ -1670,13 +1670,11 @@
     }
     const player = {
       timerId: null,
-      sources: new Set(),
+      playheadTimers: new Set(),
       scheduledMelNotes: new Set(),
       startTime: 0,
       nextStepTime: 0,
       stepIndex: 0,
-      startBar: 0,
-      endTime: Infinity,
     };
     state.workspacePlayers[workspace] = player;
     updateWorkspacePlayButton(workspace, true);
@@ -1686,11 +1684,6 @@
       player.startTime = state.audioContext.currentTime + 0.04;
       player.nextStepTime = player.startTime;
       updateTrackGains();
-      if (workspace === "arrangement") {
-        player.startBar = Math.min(state.arrangementCursor, state.arrangementBars - 1);
-        player.endTime = player.startTime + (state.arrangementBars - player.startBar) * (240 / state.bpm);
-        scheduleArrangementClips(player.startTime, player.startBar, player);
-      }
       updateWorkspacePlayButton(workspace, true);
       workspacePlaybackScheduler(workspace);
       player.timerId = window.setInterval(() => {
@@ -1714,26 +1707,15 @@
     if (!player || !state.audioContext) return;
     const now = state.audioContext.currentTime;
     const lookAhead = 0.12;
-    if (workspace === "arrangement" && now >= player.endTime) {
-      stopWorkspacePlayback(workspace);
-      return;
-    }
-    while (
-      player.nextStepTime < now + lookAhead &&
-      (workspace !== "arrangement" || player.nextStepTime < player.endTime)
-    ) {
+    while (player.nextStepTime < now + lookAhead) {
       const clockStep = player.stepIndex;
-      if (workspace === "arrangement") {
-        arrangementStepsAtTime(player.nextStepTime, player.startTime, player.startBar)
-          .forEach(({ pattern, step }) => scheduleStep(step, player.nextStepTime, pattern, null, false));
-        scheduleWorkspaceArrangementMelNotes(player, now, lookAhead);
-      } else if (workspace === "sequencer") {
+      if (workspace === "sequencer") {
         const pattern = getPattern();
         if (pattern) {
           const ticksPerGridStep = getGridTicksPerStep(pattern);
           if (clockStep % ticksPerGridStep === 0) {
             const gridStep = Math.floor(clockStep / ticksPerGridStep) % getGridStepCount(pattern);
-            scheduleStep(gridStep, player.nextStepTime, pattern, null, false);
+            scheduleStep(gridStep, player.nextStepTime, pattern, null, false, player);
           }
         }
       } else {
@@ -1768,32 +1750,6 @@
     if (player.scheduledMelNotes.size > mel.notes.length * 3) {
       player.scheduledMelNotes = new Set([...player.scheduledMelNotes].filter((key) => key.endsWith(`:${firstLoop}`) || key.endsWith(`:${nextLoop}`)));
     }
-  }
-
-  function scheduleWorkspaceArrangementMelNotes(player, now, lookAhead) {
-    const secondsPerBar = 240 / state.bpm;
-    const hasMelSolo = state.melTracks.some((track) => track.solo);
-    const hasInstrumentSolo = state.tracks.some((track) => track.solo);
-    state.melTracks.forEach((melTrack) => {
-      const instrument = getPianoTrack(melTrack.instrumentId);
-      if (!instrument || melTrack.muted || (hasMelSolo && !melTrack.solo) ||
-        instrument.muted || (hasInstrumentSolo && !instrument.solo)) return;
-      melTrack.clips.forEach((clip) => {
-        const mel = getMel(clip.melId);
-        if (!mel) return;
-        const clipEndBar = clip.startBar + getMelLengthBars(mel);
-        mel.notes.forEach((note) => {
-          const key = `${melTrack.id}:${clip.id}:${note.id}`;
-          const noteStartBar = clip.startBar + note.startTick / PIANO_TICKS_PER_BAR;
-          const noteEndBar = Math.min(clipEndBar, noteStartBar + note.durationTicks / PIANO_TICKS_PER_BAR);
-          const audibleStartBar = Math.max(player.startBar, noteStartBar);
-          const when = player.startTime + (audibleStartBar - player.startBar) * secondsPerBar;
-          if (player.scheduledMelNotes.has(key) || noteEndBar <= audibleStartBar || when < now || when >= now + lookAhead) return;
-          playPianoNote(instrument, when, note.midi, (noteEndBar - audibleStartBar) * secondsPerBar, note.velocity || 0.8);
-          player.scheduledMelNotes.add(key);
-        });
-      });
-    });
   }
 
   function setPlayhead(step) {
@@ -3477,9 +3433,8 @@
     }
   }
 
-  function scheduleArrangementClips(startTime, startBar, player = null) {
+  function scheduleArrangementClips(startTime, startBar) {
     const secondsPerBar = 240 / state.bpm;
-    const sources = player?.sources || state.arrangementSources;
     state.arrangementTracks.forEach((track) => {
       ensureArrangementTrackAudio(track);
       track.clips.forEach((clip) => {
@@ -3489,12 +3444,11 @@
         const source = state.audioContext.createBufferSource();
         source.buffer = clip.buffer;
         source.connect(track.gainNode);
-        source.onended = () => sources.delete(source);
+        source.onended = () => state.arrangementSources.delete(source);
         source.start(when, offset);
-        sources.add(source);
+        state.arrangementSources.add(source);
       });
     });
-    if (player) return;
     const hasMelSolo = state.melTracks.some((track) => track.solo);
     const hasInstrumentSolo = state.tracks.some((track) => track.solo);
     state.melTracks.forEach((melTrack) => {
