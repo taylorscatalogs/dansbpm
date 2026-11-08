@@ -91,6 +91,9 @@
           <button class="workspace-tab" id="piano-roll-tab" type="button" role="tab" aria-selected="false" aria-controls="piano-roll-view">
             Piano Roll
           </button>
+          <button class="workspace-tab" id="mixer-tab" type="button" role="tab" aria-selected="false" aria-controls="mixer-view">
+            Mixer
+          </button>
         </div>
 
         <section class="arrangement-workspace" id="arrangement-view" role="tabpanel" aria-labelledby="arrangement-tab">
@@ -272,6 +275,16 @@
                       </div>
                       <div class="piano-roll-footer">Click to add · Drag notes to move/resize · Shift-click to add/select · Drag empty space to select · Delete removes selected notes · Drum kits use GM keys B1-A5</div>
                     </section>
+                    <section class="mixer-view" id="mixer-view" role="tabpanel" aria-labelledby="mixer-tab" hidden>
+                      <div class="mixer-heading">
+                        <div>
+                          <div class="eyebrow">MIXER <span class="heading-dot"></span> TRACKS</div>
+                          <h1>Track mixer</h1>
+                          <p class="section-subtitle">Adjust channel levels here. Select an effect to jump to its controls.</p>
+                        </div>
+                      </div>
+                      <div class="mixer-content" id="mixer-content"></div>
+                    </section>
                   </div>
                 </section>
                 <div class="view-resizer" id="view-resizer" role="separator" aria-label="Resize Workspace and Track View" aria-orientation="horizontal" aria-valuemin="20" aria-valuemax="80" aria-valuenow="50" tabindex="0">
@@ -331,7 +344,9 @@
           <p>Click squares to switch drum hits on or off. Press <kbd>Space</kbd> to play, then change the tempo or swing while it runs.</p>
           <p>Use the <strong>+</strong> next to a drum to replace its sample, or open <strong>Browser → Import drum sounds</strong> to add multiple samples as new sequencer tracks.</p>
           <p>Use the top-bar <strong>Step</strong> and <strong>Piano Roll</strong> buttons to open either editor in the workspace. In the piano roll, choose an instrument, click to add notes, and drag notes or their edges to edit them.</p>
+          <p>Use <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>A</kbd> to select all in the active editor. Copy selected Piano Roll or Track View items with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>C</kbd>, then paste with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd>. Pasting is limited to the editor the items were copied from.</p>
           <p>Open <strong>Arrangement</strong> to add vocal takes or loops on separate tracks. Drag clips to line them up with your beat; playback combines all tracks at the project tempo.</p>
+          <p>Open <strong>Mixer</strong>, or choose <strong>EQ</strong> beside a track, to adjust its level, three-band EQ, and effects.</p>
           <p>Projects save in this browser. Use the project menu by the project name to save, rename, create, or switch projects. Export a full arrangement as WAV or download the drum pattern as JSON.</p>
         </form>
       </dialog>
