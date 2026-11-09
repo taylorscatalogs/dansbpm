@@ -61,6 +61,7 @@
               <span class="swing-value" id="swing-value">0%</span>
               <input id="swing-slider" type="range" min="0" max="45" value="0" aria-label="Swing amount" />
             </label>
+            <button class="quiet-button assets-open-button" id="assets-button" type="button" aria-haspopup="dialog">Assets</button>
           </div>
           <div class="transport-right">
             <span class="now-playing" id="now-playing"><span class="live-dot"></span>READY TO PLAY</span>
@@ -308,15 +309,19 @@
           </div>
         </section>
 
-        <dialog class="source-browser-dialog" id="source-browser-dialog" aria-label="Instrument and audio browser">
+        <dialog class="source-browser-dialog" id="source-browser-dialog" aria-label="Asset library">
           <aside class="source-sidebar">
-            <div class="source-sidebar-heading">SOURCES <button id="source-browser-close" type="button" aria-label="Close browser">×</button></div>
+            <div class="source-sidebar-heading">ASSET LIBRARY <button id="source-browser-close" type="button" aria-label="Close asset library">×</button></div>
+            <div class="source-section-label">PATTERNS <span id="pattern-asset-count">0</span></div>
+            <div class="asset-browser" id="pattern-asset-browser"></div>
+            <div class="source-section-label">MELS <span id="mel-asset-count">0</span></div>
+            <div class="asset-browser" id="mel-asset-browser"></div>
+            <div class="source-section-label recordings-section-label">AUDIO FILES <span id="recording-source-count">0</span></div>
+            <div class="recording-browser" id="recording-browser"></div>
+            <button class="source-add-button" id="side-add-recording" type="button">＋ Import audio</button>
             <div class="source-section-label instrument-section-label">SOUND LIBRARY <span id="drum-sound-count">138</span></div>
             <button class="source-add-button" id="import-drum-sounds-button" type="button">＋ Import drum sounds</button>
             <div class="instrument-browser" id="instrument-browser"></div>
-            <div class="source-section-label recordings-section-label">RECORDINGS <span id="recording-source-count">0</span></div>
-            <div class="recording-browser" id="recording-browser"></div>
-            <button class="source-add-button" id="side-add-recording" type="button">＋ Import audio</button>
           </aside>
         </dialog>
         <dialog class="step-instrument-dialog" id="step-instrument-dialog" aria-labelledby="step-instrument-title">

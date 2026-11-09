@@ -3727,41 +3727,113 @@
     });
   }
 
+  function renderArrangementAssetBrowser() {
+    const renderList = (containerId, countId, assets, type, dataType, getPayload) => {
+      const browser = $(`#${containerId}`);
+      browser.replaceChildren();
+      browser.setAttribute("role", "list");
+      $(`#${countId}`).textContent = String(assets.length);
+      if (!assets.length) {
+        const empty = document.createElement("div");
+        empty.className = "asset-source-empty";
+        empty.textContent = `No saved ${type.toLowerCase()} yet`;
+        browser.append(empty);
+        return;
+      }
+      assets.forEach((asset) => {
+        const item = document.createElement("div");
+        item.className = "asset-source";
+        item.draggable = true;
+        item.tabIndex = 0;
+        item.setAttribute("role", "listitem");
+        item.setAttribute("aria-label", `${asset.name}, drag to Track View`);
+        const name = document.createElement("span");
+        name.className = "asset-source-name";
+        name.textContent = asset.name;
+        const kind = document.createElement("span");
+        kind.className = "asset-source-kind";
+        kind.textContent = type;
+        item.append(name, kind);
+        item.addEventListener("dragstart", (event) => {
+          if (!event.dataTransfer) return;
+          event.dataTransfer.setData(dataType, JSON.stringify(getPayload(asset)));
+          event.dataTransfer.effectAllowed = "copy";
+        });
+        browser.append(item);
+      });
+    };
+    renderList(
+      "pattern-asset-browser",
+      "pattern-asset-count",
+      state.patterns,
+      "Pattern",
+      "application/x-pulsegrid-pattern-source",
+      (pattern) => ({ patternId: pattern.id }),
+    );
+    renderList(
+      "mel-asset-browser",
+      "mel-asset-count",
+      state.mels,
+      "Mel",
+      "application/x-pulsegrid-mel-source",
+      (mel) => ({ melId: mel.id }),
+    );
+  }
+
   function renderRecordingBrowser() {
     const browser = $("#recording-browser");
     browser.replaceChildren();
-    $("#recording-source-count").textContent = String(state.arrangementTracks.length);
-    if (!state.arrangementTracks.length) {
+    const clips = state.arrangementTracks.flatMap((track) =>
+      track.clips.map((clip) => ({ track, clip })));
+    $("#recording-source-count").textContent = String(clips.length);
+    if (!clips.length) {
       const empty = document.createElement("div");
       empty.className = "recording-source-empty";
       empty.textContent = "No audio imported yet";
       browser.append(empty);
       return;
     }
-    state.arrangementTracks.forEach((track) => {
+    clips.forEach(({ track, clip }) => {
       const item = document.createElement("button");
       item.className = "recording-source";
       item.type = "button";
-      item.title = `Show ${track.name} on the timeline`;
+      item.draggable = true;
+      item.title = `Drag ${clip.name || track.name} to Track View`;
       const color = document.createElement("span");
       color.className = "source-color";
       color.style.background = track.color;
       const name = document.createElement("span");
       name.className = "recording-source-name";
-      name.textContent = track.name;
+      name.textContent = clip.name || track.name;
       const count = document.createElement("span");
       count.className = "recording-source-count";
-      count.textContent = String(track.clips.length);
+      count.textContent = track.name;
       item.append(color, name, count);
+      item.addEventListener("dragstart", (event) => {
+        if (!event.dataTransfer) return;
+        event.dataTransfer.setData("application/x-pulsegrid-audio-source", JSON.stringify({
+          sourceTrackId: track.id,
+          clipId: clip.id,
+        }));
+        event.dataTransfer.effectAllowed = "copy";
+      });
       item.addEventListener("click", () => {
-        const clip = track.clips[0];
-        if (!clip) return;
         setArrangementCursor(clip.startBar);
         $("#timeline-scroll").scrollLeft = clip.startBar * BAR_WIDTH;
         $("#source-browser-dialog").close();
       });
       browser.append(item);
     });
+  }
+
+  function openAssetLibrary() {
+    captureCurrentPattern();
+    captureCurrentMel();
+    renderArrangementAssetBrowser();
+    renderRecordingBrowser();
+    renderInstrumentBrowser();
+    const dialog = $("#source-browser-dialog");
+    if (!dialog.open) dialog.show();
   }
 
   function addPatternClip(startBar = state.arrangementCursor, patternId = state.selectedPatternId, trackId = patternId) {
@@ -3820,6 +3892,31 @@
     renderArrangement();
     saveState();
     showToast(`${mel.name} added to Track View`);
+  }
+
+  function addAudioAssetClip(sourceTrackId, clipId, destinationTrackId, startBar) {
+    const sourceTrack = state.arrangementTracks.find((track) => track.id === sourceTrackId);
+    const sourceClip = sourceTrack?.clips.find((clip) => clip.id === clipId);
+    if (!sourceTrack || !sourceClip) {
+      showToast("That audio asset is no longer available.");
+      return;
+    }
+    const destination = state.arrangementTracks.find((track) => track.id === destinationTrackId)
+      || createArrangementTrack(sourceTrack.name);
+    const clip = {
+      ...sourceClip,
+      id: makeId(),
+      startBar: clampArrangementStart(startBar, getArrangementClipDuration("audio", sourceClip)),
+    };
+    destination.clips.push(clip);
+    destination.clips.sort((left, right) => left.startBar - right.startBar);
+    updateArrangementLength();
+    renderArrangement();
+    saveState();
+    if (clip.blob) {
+      persistClip(destination, clip).catch(() => showToast("Audio was added, but browser storage could not be updated."));
+    }
+    showToast(`${clip.name || sourceTrack.name} added to Track View`);
   }
 
   function moveMelClip(clipId, sourceTrackId, destinationTrackId, startBar) {
@@ -3985,7 +4082,8 @@
         const transferTypes = Array.from(event.dataTransfer.types || []);
         const isCopy = event.dataTransfer.files.length ||
           transferTypes.includes("application/x-pulsegrid-pattern-source") ||
-          transferTypes.includes("application/x-pulsegrid-mel-source");
+          transferTypes.includes("application/x-pulsegrid-mel-source") ||
+          transferTypes.includes("application/x-pulsegrid-audio-source");
         event.dataTransfer.dropEffect = isCopy ? "copy" : "move";
       }
       updateArrangementDragPreview(event, lane);
@@ -4006,6 +4104,16 @@
       if (files.length) {
         const audioTrackId = state.arrangementTracks.some((track) => track.id === trackId) ? trackId : null;
         for (const file of files) await importRecording(file, audioTrackId, startBar);
+        return;
+      }
+      const audioSource = event.dataTransfer?.getData("application/x-pulsegrid-audio-source");
+      if (audioSource) {
+        try {
+          const { sourceTrackId, clipId } = JSON.parse(audioSource);
+          addAudioAssetClip(sourceTrackId, clipId, trackId, startBar);
+        } catch {
+          showToast("That audio asset could not be added.");
+        }
         return;
       }
       const melSource = event.dataTransfer?.getData("application/x-pulsegrid-mel-source");
@@ -6921,7 +7029,8 @@
       event.dataTransfer.setData("application/x-pulsegrid-pattern-source", JSON.stringify({ patternId: pattern.id }));
       event.dataTransfer.effectAllowed = "copy";
     });
-    $("#sequencer-browser-button").addEventListener("click", () => $("#source-browser-dialog").showModal());
+    $("#assets-button").addEventListener("click", openAssetLibrary);
+    $("#sequencer-browser-button").addEventListener("click", openAssetLibrary);
     $("#step-instrument-close").addEventListener("click", () => $("#step-instrument-dialog").close());
     $("#step-instrument-dialog").addEventListener("close", () => { stepInstrumentTargetTrackId = null; });
     $("#step-instrument-dialog").addEventListener("click", (event) => {
@@ -6944,7 +7053,7 @@
     $("#new-pattern-button").addEventListener("click", createPattern);
     $("#new-pattern-sequencer-button").addEventListener("click", createPattern);
     $("#add-pattern-button").addEventListener("click", () => addPatternClip());
-    $("#source-browser-button").addEventListener("click", () => $("#source-browser-dialog").showModal());
+    $("#source-browser-button").addEventListener("click", openAssetLibrary);
     $("#source-browser-close").addEventListener("click", () => $("#source-browser-dialog").close());
     $("#import-recording-button").addEventListener("click", () => requestRecordingImport());
     $("#empty-import-button").addEventListener("click", () => requestRecordingImport());
