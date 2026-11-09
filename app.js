@@ -184,7 +184,9 @@
   const STORAGE_KEY = "pulsegrid-session-v1";
   const PROJECTS_KEY = `${STORAGE_KEY}-projects`;
   const PROJECT_STORAGE_PREFIX = `${STORAGE_KEY}-project-`;
-  const STEP_COUNT = 64;
+  const MAX_PATTERN_BARS = 32;
+  const MAX_PATTERN_STEPS = MAX_PATTERN_BARS * 16;
+  const STEP_COUNT = MAX_PATTERN_BARS * 32;
   const BAR_WIDTH = 116;
   const MAX_ARRANGEMENT_BARS = 256;
   const TRACK_COLORS = ["#7cc9ff", "#ff9178", "#ee9df6", "#f6ca74", "#93e2bd"];
@@ -284,6 +286,7 @@
   const $ = (selector) => document.querySelector(selector);
   const trackList = $("#track-list");
   const stepsHeader = $("#steps-header");
+  const sequencerGridScroll = $("#sequencer-grid-scroll");
   const patternCards = $("#pattern-cards");
   const playButton = $("#play-button");
   const tempoValue = $("#tempo-value");
@@ -348,6 +351,43 @@
   function getGridStepCount(pattern = getPattern()) {
     const bars = pattern ? pattern.steps / 16 : state.steps / 16;
     return bars * getStepsPerBar(pattern);
+  }
+
+  function normalizePatternSteps(steps) {
+    const bars = Number.isFinite(steps) ? Math.round(steps / 16) : 1;
+    return Math.max(1, Math.min(MAX_PATTERN_BARS, bars)) * 16;
+  }
+
+  function renderPatternLengthControls() {
+    const bars = state.steps / 16;
+    const label = `${bars} ${bars === 1 ? "BAR" : "BARS"}`;
+    $("#bar-label").textContent = label;
+    $("#pattern-bars-value").textContent = label;
+    $("#arrangement-pattern-length").value = String(state.steps);
+    $("#decrease-pattern-bars").disabled = bars <= 1;
+    $("#increase-pattern-bars").disabled = bars >= MAX_PATTERN_BARS;
+  }
+
+  function populatePatternLengthOptions() {
+    const select = $("#arrangement-pattern-length");
+    select.replaceChildren();
+    for (let bars = 1; bars <= MAX_PATTERN_BARS; bars += 1) {
+      const option = document.createElement("option");
+      option.value = String(bars * 16);
+      option.textContent = `${bars} ${bars === 1 ? "BAR" : "BARS"}`;
+      select.append(option);
+    }
+  }
+
+  function setSequencerGridDimensions(stepCount) {
+    const cellWidth = 14;
+    const gap = 2;
+    const padding = 12;
+    sequencerGridScroll.style.setProperty("--grid-step-count", String(stepCount));
+    sequencerGridScroll.style.setProperty("--grid-step-size", `${cellWidth}px`);
+    sequencerGridScroll.style.setProperty("--grid-step-gap", `${gap}px`);
+    sequencerGridScroll.style.setProperty("--grid-content-width",
+      `${stepCount * cellWidth + Math.max(0, stepCount - 1) * gap + padding}px`);
   }
 
   function remapGridCells(cells, bars, previousSlotsPerBar, nextSlotsPerBar) {
@@ -448,9 +488,27 @@
     });
   }
 
+  function clearSelectedStepCells() {
+    const selected = new Set(state.selectedStepCells);
+    let changed = false;
+    state.tracks.forEach((track) => track.cells.forEach((active, step) => {
+      if (active && selected.has(`${track.id}:${step}`)) {
+        track.cells[step] = false;
+        changed = true;
+      }
+    }));
+    state.selectedStepCells.clear();
+    if (changed) {
+      renderTracks();
+      saveState();
+    } else {
+      document.querySelectorAll(".step-cell.is-selected").forEach((cell) => cell.classList.remove("is-selected"));
+    }
+  }
+
   function applyPattern(pattern) {
     state.selectedPatternId = pattern.id;
-    state.steps = pattern.steps === 32 ? 32 : 16;
+    state.steps = normalizePatternSteps(pattern.steps);
     const patternTrackIds = new Set(getPatternTrackIds(pattern));
     state.tracks.forEach((track) => {
       track.cells = patternTrackIds.has(track.id)
@@ -461,13 +519,7 @@
         track.variant = SOUND_VARIANTS[track.kind].some((sound) => sound.id === variant) ? variant : "classic";
       }
     });
-    $("#arrangement-pattern-length").value = String(state.steps);
-    $("#bar-label").textContent = state.steps === 16 ? "1 BAR" : "2 BARS";
-    document.querySelectorAll(".length-button").forEach((button) => {
-      const selected = Number(button.dataset.steps) === state.steps;
-      button.classList.toggle("is-selected", selected);
-      button.setAttribute("aria-pressed", String(selected));
-    });
+    renderPatternLengthControls();
     $("#grid-resolution-select").value = getPatternGridResolution(pattern);
     renderHeader();
   }
@@ -890,12 +942,44 @@
     deleteSelectedPianoNotes(selected);
   }
 
+  function nudgeSelectedPianoNotes(horizontal, vertical = 0, resize = false) {
+    const selected = state.pianoNotes.filter((note) =>
+      state.selectedPianoNoteIds.has(note.id) || note.id === state.selectedPianoNoteId);
+    if (!selected.length) return false;
+    const totalTicks = state.pianoBars * PIANO_TICKS_PER_BAR;
+    if (resize) {
+      const delta = horizontal * state.pianoSnap;
+      const minimum = Math.max(...selected.map((note) => state.pianoSnap - note.durationTicks));
+      const maximum = Math.min(...selected.map((note) => totalTicks - note.startTick - note.durationTicks));
+      const boundedDelta = Math.max(minimum, Math.min(maximum, delta));
+      if (!boundedDelta || Math.sign(boundedDelta) !== Math.sign(delta)) return false;
+      selected.forEach((note) => { note.durationTicks += boundedDelta; });
+    } else {
+      const minStart = Math.min(...selected.map((note) => note.startTick));
+      const maxEnd = Math.max(...selected.map((note) => note.startTick + note.durationTicks));
+      const minPitch = Math.min(...selected.map((note) => note.midi));
+      const maxPitch = Math.max(...selected.map((note) => note.midi));
+      const deltaTicks = Math.max(-minStart, Math.min(totalTicks - maxEnd, horizontal * state.pianoSnap));
+      const deltaPitch = Math.max(PIANO_BOTTOM_MIDI - minPitch,
+        Math.min(PIANO_TOP_MIDI - maxPitch, vertical));
+      if (!deltaTicks && !deltaPitch) return false;
+      selected.forEach((note) => {
+        note.startTick += deltaTicks;
+        note.midi += deltaPitch;
+      });
+    }
+    renderPianoRoll();
+    saveState();
+    return true;
+  }
+
   function startPianoSelection(event) {
     if (event.button !== 0 || event.target.closest(".piano-roll-note")) return;
     const grid = $("#piano-roll-grid");
     const startX = event.clientX;
     const startY = event.clientY;
-    const additive = event.shiftKey;
+    const subtractive = event.altKey;
+    const additive = event.shiftKey && !subtractive;
     let marquee = null;
     let moved = false;
     const update = (moveEvent) => {
@@ -919,11 +1003,14 @@
       document.removeEventListener("pointercancel", finish);
       if (!moved) return;
       const selection = marquee.getBoundingClientRect();
-      const next = new Set(additive ? state.selectedPianoNoteIds : []);
+      const next = new Set(additive || subtractive ? state.selectedPianoNoteIds : []);
       document.querySelectorAll(".piano-roll-note").forEach((note) => {
         const bounds = note.getBoundingClientRect();
         if (bounds.left <= selection.right && bounds.right >= selection.left &&
-          bounds.top <= selection.bottom && bounds.bottom >= selection.top) next.add(note.dataset.noteId);
+          bounds.top <= selection.bottom && bounds.bottom >= selection.top) {
+          if (subtractive) next.delete(note.dataset.noteId);
+          else next.add(note.dataset.noteId);
+        }
       });
       state.selectedPianoNoteIds = next;
       state.selectedPianoNoteId = [...next].at(-1) || null;
@@ -941,7 +1028,7 @@
   }
 
   function clearMarqueeSelectionOnOutsidePointer(event) {
-    if (event.button !== 0 || event.shiftKey) return;
+    if (event.button !== 0 || event.shiftKey || event.altKey) return;
     const target = event.target;
     const pianoNote = target instanceof Element ? target.closest(".piano-roll-note") : null;
     const clickedSelectedPianoNote = pianoNote &&
@@ -1077,16 +1164,9 @@
 
   function renderHeader() {
     stepsHeader.innerHTML = "";
-    const gridHeader = stepsHeader.parentElement;
-    gridHeader.classList.toggle("is-two-bars", state.steps === 32);
     const slotsPerBar = getStepsPerBar();
-    const columns = Math.min(16, slotsPerBar);
     const stepCount = getGridStepCount();
-    const rows = Math.ceil(stepCount / columns);
-    const rowHeight = rows > 2 ? 12 : 17;
-    gridHeader.style.height = `${Math.max(45, rows * rowHeight + 11)}px`;
-    stepsHeader.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
-    stepsHeader.style.gridTemplateRows = `repeat(${rows}, ${rowHeight}px)`;
+    setSequencerGridDimensions(stepCount);
     for (let step = 0; step < stepCount; step += 1) {
       const barStep = step % slotsPerBar;
       const stepsPerBeat = slotsPerBar / 4;
@@ -1102,17 +1182,16 @@
     const includedTrackIds = new Set(getPatternTrackIds(getPattern()));
     const visibleTracks = state.tracks.filter((track) => includedTrackIds.has(track.id));
     const liveKeys = state.keyboardRecording?.mode === "sequencer" ? getStepKeyboardMap() : null;
+    setSequencerGridDimensions(getGridStepCount());
     visibleTracks.forEach((track) => {
       const row = document.createElement("div");
       row.className = "track-row";
       row.dataset.trackId = track.id;
       row.style.setProperty("--track-color", track.color);
       const slotsPerBar = getStepsPerBar();
-      const columns = Math.min(16, slotsPerBar);
       const stepCount = getGridStepCount();
-      const rows = Math.ceil(stepCount / columns);
-      const cellHeight = Math.min(28, Math.max(12, Math.floor((64 - (rows - 1) * 5) / rows)));
-      row.style.minHeight = `${Math.max(64, rows * cellHeight + (rows - 1) * 5)}px`;
+      const cellHeight = 18;
+      row.style.minHeight = "42px";
 
       const meta = document.createElement("div");
       meta.className = "track-meta";
@@ -1168,20 +1247,35 @@
 
       const grid = document.createElement("div");
       grid.className = "steps-grid";
-      grid.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
-      grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
       grid.style.setProperty("--step-cell-height", `${cellHeight}px`);
       grid.setAttribute("role", "group");
       grid.setAttribute("aria-label", `${track.name} steps`);
       for (let step = 0; step < stepCount; step += 1) {
         const cell = document.createElement("button");
-        cell.className = `step-cell${track.cells[step] ? " is-on" : ""}${state.selectedStepCells.has(`${track.id}:${step}`) ? " is-selected" : ""}`;
+        const stepInBar = step % slotsPerBar;
+        const stepsPerBeat = slotsPerBar / 4;
+        cell.className = `step-cell${track.cells[step] ? " is-on" : ""}${state.selectedStepCells.has(`${track.id}:${step}`) ? " is-selected" : ""}${stepInBar === 0 ? " is-bar" : stepInBar % stepsPerBeat === 0 ? " is-beat" : ""}`;
         cell.type = "button";
         cell.dataset.step = String(step);
         cell.setAttribute("aria-label", `${track.name}, step ${step + 1}${track.cells[step] ? ", on" : ", off"}`);
         cell.setAttribute("aria-pressed", String(track.cells[step]));
         if (state.currentStep === step) cell.classList.add("is-playhead");
-        cell.addEventListener("click", () => {
+        cell.addEventListener("click", (event) => {
+          const cellKey = `${track.id}:${step}`;
+          if (event.shiftKey) {
+            state.selectedArrangementItems.clear();
+            state.arrangementSelectionFromMarquee = false;
+            state.selectedPianoNoteIds.clear();
+            state.selectedPianoNoteId = null;
+            state.pianoSelectionFromMarquee = false;
+            updateArrangementSelection();
+            document.querySelectorAll(".piano-roll-note").forEach((item) => item.classList.remove("is-selected"));
+            state.selectedStepCells.add(cellKey);
+            cell.classList.add("is-selected");
+            return;
+          }
+          state.selectedStepCells.delete(cellKey);
+          cell.classList.remove("is-selected");
           track.cells[step] = !track.cells[step];
           cell.classList.toggle("is-on", track.cells[step]);
           cell.setAttribute("aria-pressed", String(track.cells[step]));
@@ -1301,21 +1395,15 @@
   }
 
   function setLength(steps) {
-    state.steps = steps;
+    state.steps = normalizePatternSteps(steps);
     state.liveRecordedHits.clear();
     const activePattern = getPattern();
-    if (activePattern) activePattern.steps = steps;
-    $("#arrangement-pattern-length").value = String(steps);
+    if (activePattern) activePattern.steps = state.steps;
     state.patternClips.forEach((clip) => {
       const pattern = getPattern(clip.patternId);
       if (pattern) clip.startBar = Math.min(clip.startBar, maxPatternStartBar(pattern.steps * (clip.repeatCount || 1)));
     });
-    document.querySelectorAll(".length-button").forEach((button) => {
-      const selected = Number(button.dataset.steps) === steps;
-      button.classList.toggle("is-selected", selected);
-      button.setAttribute("aria-pressed", String(selected));
-    });
-    $("#bar-label").textContent = steps === 16 ? "1 BAR" : "2 BARS";
+    renderPatternLengthControls();
     renderHeader();
     renderTracks();
     updateArrangementLength();
@@ -3362,13 +3450,45 @@
     return true;
   }
 
+  function nudgeSelectedArrangementItems(direction) {
+    if (!state.selectedArrangementItems.size) return false;
+    const selected = [];
+    state.patternClips.forEach((clip) => {
+      if (state.selectedArrangementItems.has(arrangementSelectionKey("pattern", clip.id))) {
+        const pattern = getPattern(clip.patternId);
+        if (pattern) selected.push({ clip, length: pattern.steps * (clip.repeatCount || 1) / 16 });
+      }
+    });
+    state.melTracks.forEach((track) => track.clips.forEach((clip) => {
+      if (state.selectedArrangementItems.has(arrangementSelectionKey("mel", clip.id))) {
+        const mel = getMel(clip.melId);
+        if (mel) selected.push({ clip, length: getMelLengthBars(mel) });
+      }
+    }));
+    state.arrangementTracks.forEach((track) => track.clips.forEach((clip) => {
+      if (state.selectedArrangementItems.has(arrangementSelectionKey("audio", clip.id))) {
+        selected.push({ clip, length: clip.buffer.duration / (240 / state.bpm) });
+      }
+    }));
+    if (!selected.length) return false;
+    const minStart = Math.min(...selected.map(({ clip }) => clip.startBar));
+    const maxEnd = Math.max(...selected.map(({ clip, length }) => clip.startBar + length));
+    const delta = Math.max(-minStart, Math.min(MAX_ARRANGEMENT_BARS - maxEnd, direction));
+    if (!delta) return false;
+    selected.forEach(({ clip }) => { clip.startBar += delta; });
+    renderArrangement();
+    saveState();
+    return true;
+  }
+
   function startArrangementSelection(event) {
     if (event.button !== 0 || !event.target.closest(".timeline-lane") ||
       event.target.closest("[data-selectable-type]")) return;
     const content = $("#timeline-content");
     const startX = event.clientX;
     const startY = event.clientY;
-    const additive = event.shiftKey;
+    const subtractive = event.altKey;
+    const additive = event.shiftKey && !subtractive;
     let marquee = null;
     let moved = false;
     const update = (moveEvent) => {
@@ -3392,12 +3512,14 @@
       document.removeEventListener("pointercancel", finish);
       if (!moved) return;
       const selection = marquee.getBoundingClientRect();
-      const next = new Set(additive ? state.selectedArrangementItems : []);
+      const next = new Set(additive || subtractive ? state.selectedArrangementItems : []);
       document.querySelectorAll("[data-selectable-type][data-clip-id]").forEach((item) => {
         const bounds = item.getBoundingClientRect();
         if (bounds.left <= selection.right && bounds.right >= selection.left &&
           bounds.top <= selection.bottom && bounds.bottom >= selection.top) {
-          next.add(arrangementSelectionKey(item.dataset.selectableType, item.dataset.clipId));
+          const itemKey = arrangementSelectionKey(item.dataset.selectableType, item.dataset.clipId);
+          if (subtractive) next.delete(itemKey);
+          else next.add(itemKey);
         }
       });
       state.selectedArrangementItems = next;
@@ -4583,7 +4705,7 @@
       if (!saved || typeof saved !== "object") return;
       if (Number.isFinite(saved.bpm)) state.bpm = Math.max(60, Math.min(180, Math.round(saved.bpm)));
       if (Number.isFinite(saved.swing)) state.swing = Math.max(0, Math.min(45, Math.round(saved.swing)));
-      if (saved.steps === 16 || saved.steps === 32) state.steps = saved.steps;
+      if (Number.isFinite(saved.steps)) state.steps = normalizePatternSteps(saved.steps);
       if (Number.isFinite(saved.arrangementBars)) state.arrangementBars = Math.max(32, Math.min(MAX_ARRANGEMENT_BARS, Math.round(saved.arrangementBars)));
       if (Number.isFinite(saved.arrangementCursor)) state.arrangementCursor = Math.max(0, Math.min(MAX_ARRANGEMENT_BARS - 1, saved.arrangementCursor));
       if (Number.isFinite(saved.workspaceRatio)) state.workspaceRatio = Math.max(20, Math.min(80, Math.round(saved.workspaceRatio)));
@@ -4659,7 +4781,8 @@
             const variants = {};
             const gridResolution = getPatternGridResolution(pattern);
             const isLegacyGrid = !GRID_RESOLUTIONS.includes(pattern.gridResolution);
-            const bars = pattern.steps === 32 ? 2 : 1;
+            const patternSteps = normalizePatternSteps(pattern.steps);
+            const bars = patternSteps / 16;
             state.tracks.forEach((track) => {
               const storedCells = Array.from({ length: STEP_COUNT }, (_, cellIndex) => pattern.cells?.[track.id]?.[cellIndex] === true);
               cells[track.id] = isLegacyGrid
@@ -4672,7 +4795,7 @@
               id: pattern.id,
               name: pattern.name,
               color: isPatternColor(pattern.color) ? pattern.color : getPatternColor(index),
-              steps: pattern.steps === 32 ? 32 : 16,
+              steps: patternSteps,
               trackIds: Array.isArray(pattern.trackIds)
                 ? [...new Set(pattern.trackIds.filter((trackId) => state.tracks.some((track) => track.id === trackId)))]
                 : state.tracks.filter((track) => !track.libraryOnly).map((track) => track.id),
@@ -5085,9 +5208,8 @@
       swingSlider.style.setProperty("--range-progress", `${state.swing / 45 * 100}%`);
       saveState();
     });
-    document.querySelectorAll(".length-button").forEach((button) => {
-      button.addEventListener("click", () => setLength(Number(button.dataset.steps)));
-    });
+    $("#decrease-pattern-bars").addEventListener("click", () => setLength(state.steps - 16));
+    $("#increase-pattern-bars").addEventListener("click", () => setLength(state.steps + 16));
     $("#clear-button").addEventListener("click", clearPattern);
     $("#randomize-button").addEventListener("click", randomize);
     $("#export-button").addEventListener("click", exportPattern);
@@ -5347,13 +5469,41 @@
         } else if (key === "c" && ["arrangement", "piano-roll", "mixer"].includes(state.view)) {
           event.preventDefault();
           copyEditorSelection();
-        } else if (key === "z" && ["arrangement", "piano-roll", "mixer"].includes(state.view)) {
+        } else if (key === "v" && ["arrangement", "piano-roll", "mixer"].includes(state.view)) {
           event.preventDefault();
           pasteEditorClipboard();
+        } else if (key === "x" && ["arrangement", "piano-roll", "mixer"].includes(state.view)) {
+          event.preventDefault();
+          copyEditorSelection();
+          if (state.view === "piano-roll") deleteSelectedPianoNote();
+          else deleteSelectedArrangementItems();
         }
       }
       if (!isTyping && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey && !dialogOpen) {
         if (recordStepKeyboardHit(event) || recordPianoKeyboardNote(event)) return;
+      }
+      if (!isTyping && !dialogOpen && !event.ctrlKey && !event.metaKey && !event.altKey &&
+        state.view === "piano-roll" && (state.selectedPianoNoteIds.size || state.selectedPianoNoteId)) {
+        const key = event.key;
+        if (key === "ArrowLeft" || key === "ArrowRight") {
+          event.preventDefault();
+          nudgeSelectedPianoNotes(key === "ArrowRight" ? 1 : -1, 0, event.shiftKey);
+        } else if (key === "ArrowUp" || key === "ArrowDown") {
+          event.preventDefault();
+          nudgeSelectedPianoNotes(0, key === "ArrowUp" ? 1 : -1);
+        }
+      }
+      if (!isTyping && !dialogOpen && (event.ctrlKey || event.metaKey) && !event.altKey &&
+        state.view === "piano-roll" && (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+        (state.selectedPianoNoteIds.size || state.selectedPianoNoteId)) {
+        event.preventDefault();
+        nudgeSelectedPianoNotes(0, event.key === "ArrowUp" ? 12 : -12);
+      }
+      if (!isTyping && !dialogOpen && !event.ctrlKey && !event.metaKey && !event.altKey &&
+        ["arrangement", "mixer"].includes(state.view) && state.selectedArrangementItems.size &&
+        (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        event.preventDefault();
+        nudgeSelectedArrangementItems(event.key === "ArrowRight" ? 1 : -1);
       }
       if (event.code === "Space" && !isTyping && !isButton && !dialogOpen) {
         event.preventDefault();
@@ -5368,6 +5518,9 @@
         } else if (state.selectedPianoNoteIds.size || state.selectedPianoNoteId) {
           event.preventDefault();
           deleteSelectedPianoNote();
+        } else if (state.view === "sequencer" && state.selectedStepCells.size) {
+          event.preventDefault();
+          clearSelectedStepCells();
         }
       }
       if (event.key === "Escape" && $("#help-dialog").open) $("#help-dialog").close();
@@ -5380,6 +5533,7 @@
     state.patterns = [initialPattern];
     state.selectedPatternId = initialPattern.id;
     initializeProjects();
+    populatePatternLengthOptions();
     restoreState();
     ensureMels();
     tempoValue.textContent = String(state.bpm);

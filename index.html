@@ -65,8 +65,9 @@
             <div class="length-control" role="group" aria-label="Pattern length">
               <span class="control-caption">LENGTH</span>
               <div class="segmented-control">
-                <button class="length-button is-selected" data-steps="16" type="button" aria-pressed="true">1 BAR</button>
-                <button class="length-button" data-steps="32" type="button" aria-pressed="false">2 BARS</button>
+                <button class="length-button" id="decrease-pattern-bars" type="button" aria-label="Remove one bar">−</button>
+                <span class="length-value" id="pattern-bars-value">1 BAR</span>
+                <button class="length-button" id="increase-pattern-bars" type="button" aria-label="Add one bar">+</button>
               </div>
             </div>
           </div>
@@ -197,11 +198,13 @@
                         </div>
                       </div>
                       <div class="sequencer-card">
-                        <div class="grid-header">
-                          <div class="track-header-label"><span>TRACK</span><span class="header-track-count" id="track-count">06</span></div>
-                          <div class="steps-header" id="steps-header" aria-hidden="true"></div>
+                        <div class="sequencer-grid-scroll" id="sequencer-grid-scroll" role="region" aria-label="Scrollable step grid" tabindex="0">
+                          <div class="grid-header">
+                            <div class="track-header-label"><span>TRACK</span><span class="header-track-count" id="track-count">06</span></div>
+                            <div class="steps-header" id="steps-header" aria-hidden="true"></div>
+                          </div>
+                          <div class="track-list" id="track-list" aria-label="Drum step sequencer"></div>
                         </div>
-                        <div class="track-list" id="track-list" aria-label="Drum step sequencer"></div>
                         <div class="grid-footer">
                           <div class="grid-legend"><span class="legend-swatch"></span>STEP ON <span class="legend-playhead"></span>PLAYHEAD</div>
                           <span class="grid-hint"><kbd>SPACE</kbd> play / stop <span class="hint-divider">·</span> click steps to edit</span>
@@ -344,7 +347,8 @@
           <p>Click squares to switch drum hits on or off. Press <kbd>Space</kbd> to play, then change the tempo or swing while it runs.</p>
           <p>Use the <strong>+</strong> next to a drum to replace its sample, or open <strong>Browser → Import drum sounds</strong> to add multiple samples as new sequencer tracks.</p>
           <p>Use the top-bar <strong>Step</strong> and <strong>Piano Roll</strong> buttons to open either editor in the workspace. In the piano roll, choose an instrument, click to add notes, and drag notes or their edges to edit them.</p>
-          <p>Use <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>A</kbd> to select all in the active editor. Copy selected Piano Roll or Track View items with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>C</kbd>, then paste with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd>. Pasting is limited to the editor the items were copied from.</p>
+          <p><strong>Keyboard shortcuts</strong> (use <kbd>⌘</kbd> instead of <kbd>Ctrl</kbd> on Mac): <kbd>Space</kbd> play/stop; <kbd>Ctrl</kbd> + <kbd>A</kbd> select all in the active editor; <kbd>Ctrl</kbd> + <kbd>C</kbd>/<kbd>V</kbd> copy/paste selected Piano Roll notes or Track View clips; <kbd>Ctrl</kbd> + <kbd>X</kbd> cut them; <kbd>Delete</kbd>/<kbd>Backspace</kbd> remove selected notes or clips.</p>
+          <p>In <strong>Step</strong>, <kbd>Shift</kbd>-click cells to select them, then <kbd>Delete</kbd> to clear the selected hits. In <strong>Piano Roll</strong> and <strong>Track View</strong>, <kbd>Alt</kbd>/<kbd>Option</kbd>-drag a marquee to deselect items inside it; <kbd>Shift</kbd>-drag adds to the selection. Piano Roll arrow keys move selected notes by one snap step or semitone; <kbd>Shift</kbd> + <kbd>←</kbd>/<kbd>→</kbd> changes note length by one snap step; <kbd>Ctrl</kbd> + <kbd>↑</kbd>/<kbd>↓</kbd> moves notes by an octave. In Track View, <kbd>←</kbd>/<kbd>→</kbd> nudges selected clips by one bar.</p>
           <p>Open <strong>Arrangement</strong> to add vocal takes or loops on separate tracks. Drag clips to line them up with your beat; playback combines all tracks at the project tempo.</p>
           <p>Open <strong>Mixer</strong>, or choose <strong>EQ</strong> beside a track, to adjust its level, three-band EQ, and effects.</p>
           <p>Projects save in this browser. Use the project menu by the project name to save, rename, create, or switch projects. Export a full arrangement as WAV or download the drum pattern as JSON.</p>
