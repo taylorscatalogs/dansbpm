@@ -310,6 +310,7 @@
     pianoCursorTick: 0,
     pianoBars: 4,
     pianoScale: 1,
+    pianoDrawMode: false,
     pianoSnap: 2,
     pianoNoteLength: 2,
     selectedPianoTrackId: "piano-grand",
@@ -1026,6 +1027,8 @@
     grid.style.setProperty("--piano-tick-width", `${tickWidth}px`);
     grid.style.setProperty("--piano-beat-width", `${tickWidth * 8}px`);
     grid.style.setProperty("--piano-bar-width", `${tickWidth * PIANO_TICKS_PER_BAR}px`);
+    grid.classList.toggle("is-draw-mode", state.pianoDrawMode);
+    $("#piano-draw-mode-button").setAttribute("aria-pressed", String(state.pianoDrawMode));
     let playhead = $("#piano-roll-playhead");
     if (!playhead) {
       playhead = document.createElement("button");
@@ -1103,10 +1106,99 @@
         const resize = document.createElement("span");
         resize.className = "piano-roll-note-resize";
         element.append(resize);
-        element.addEventListener("pointerdown", (event) => startPianoNoteEdit(event, note, event.target === resize));
+        element.addEventListener("pointerdown", (event) => {
+          if (state.pianoDrawMode) startPianoDrawStroke(event);
+          else startPianoNoteEdit(event, note, event.target === resize);
+        });
         grid.append(element);
       });
       updatePianoPlayhead();
+  }
+
+  function makePianoNoteFromPointer(event) {
+    const track = getPianoTrack();
+    if (!track) return null;
+    const grid = $("#piano-roll-grid");
+    const rect = grid.getBoundingClientRect();
+    const totalTicks = state.pianoBars * PIANO_TICKS_PER_BAR;
+    if (event.clientX < rect.left || event.clientX > rect.right ||
+      event.clientY < rect.top || event.clientY > rect.bottom) return null;
+    const rawTick = Math.max(0, Math.min(totalTicks - 1, (event.clientX - rect.left) / getPianoTickWidth()));
+    const startTick = Math.floor(rawTick / state.pianoSnap) * state.pianoSnap;
+    const row = Math.max(0, Math.min(PIANO_TOP_MIDI - PIANO_BOTTOM_MIDI,
+      Math.floor((event.clientY - rect.top) / PIANO_ROW_HEIGHT)));
+    return {
+      id: makeId(),
+      trackId: state.selectedPianoTrackId,
+      midi: PIANO_TOP_MIDI - row,
+      startTick,
+      durationTicks: Math.max(1, Math.min(state.pianoNoteLength, totalTicks - startTick)),
+      velocity: 0.8,
+    };
+  }
+
+  function startPianoDrawStroke(event) {
+    if (event.button !== 0 || !state.pianoDrawMode || !getPianoTrack()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    $("#piano-roll-grid").setPointerCapture(event.pointerId);
+    state.pianoSelectionFromMarquee = false;
+    state.selectedPianoNoteId = null;
+    state.selectedPianoNoteIds.clear();
+    document.querySelectorAll(".piano-roll-note.is-selected").forEach((note) => note.classList.remove("is-selected"));
+    state.selectedArrangementItems.clear();
+    state.arrangementSelectionFromMarquee = false;
+    updateArrangementSelection();
+    const stroke = {
+      pointerId: event.pointerId,
+      cells: new Set(),
+      existingCells: new Set(state.pianoNotes.map((note) => `${note.trackId}:${note.startTick}:${note.midi}`)),
+      lastPosition: null,
+    };
+    const placeNote = (clientX, clientY) => {
+      const note = makePianoNoteFromPointer({ clientX, clientY });
+      if (!note) return;
+      const cellKey = `${note.trackId}:${note.startTick}:${note.midi}`;
+      if (stroke.existingCells.has(cellKey) || stroke.cells.has(cellKey)) return false;
+      stroke.cells.add(cellKey);
+      state.pianoNotes.push(note);
+      state.selectedPianoNoteIds.add(note.id);
+      state.selectedPianoNoteId = note.id;
+      return true;
+    };
+    const draw = (drawEvent) => {
+      if (drawEvent.pointerId !== stroke.pointerId) return;
+      const previous = stroke.lastPosition || { x: drawEvent.clientX, y: drawEvent.clientY };
+      const stepsPerCell = Math.max(
+        Math.abs(drawEvent.clientX - previous.x) / (getPianoTickWidth() * state.pianoSnap),
+        Math.abs(drawEvent.clientY - previous.y) / PIANO_ROW_HEIGHT,
+      );
+      const segments = Math.max(1, Math.ceil(stepsPerCell * 2));
+      let changed = false;
+      for (let segment = 1; segment <= segments; segment += 1) {
+        const ratio = segment / segments;
+        changed = placeNote(
+          previous.x + (drawEvent.clientX - previous.x) * ratio,
+          previous.y + (drawEvent.clientY - previous.y) * ratio,
+        ) || changed;
+      }
+      stroke.lastPosition = { x: drawEvent.clientX, y: drawEvent.clientY };
+      if (changed) renderPianoRoll();
+    };
+    const finish = (finishEvent) => {
+      if (finishEvent.pointerId !== stroke.pointerId) return;
+      document.removeEventListener("pointermove", draw);
+      document.removeEventListener("pointerup", finish);
+      document.removeEventListener("pointercancel", finish);
+      if (!stroke.cells.size) return;
+      updateArrangementLength();
+      renderArrangement();
+      saveState();
+    };
+    draw(event);
+    document.addEventListener("pointermove", draw);
+    document.addEventListener("pointerup", finish);
+    document.addEventListener("pointercancel", finish);
   }
 
   function addPianoNoteFromPointer(event) {
@@ -1115,21 +1207,8 @@
       deleteSelectedPianoNotes(new Set(state.selectedPianoNoteIds));
       return;
     }
-    const grid = $("#piano-roll-grid");
-    const rect = grid.getBoundingClientRect();
-    const totalTicks = state.pianoBars * PIANO_TICKS_PER_BAR;
-    const rawTick = Math.max(0, Math.min(totalTicks - 1, (event.clientX - rect.left) / getPianoTickWidth()));
-    const startTick = Math.floor(rawTick / state.pianoSnap) * state.pianoSnap;
-    const row = Math.max(0, Math.min(PIANO_TOP_MIDI - PIANO_BOTTOM_MIDI, Math.floor((event.clientY - rect.top) / PIANO_ROW_HEIGHT)));
-    const midi = PIANO_TOP_MIDI - row;
-    const note = {
-      id: makeId(),
-      trackId: state.selectedPianoTrackId,
-      midi,
-      startTick,
-      durationTicks: Math.max(1, Math.min(state.pianoNoteLength, totalTicks - startTick)),
-      velocity: 0.8,
-    };
+    const note = makePianoNoteFromPointer(event);
+    if (!note) return;
     state.pianoNotes.push(note);
     state.selectedPianoNoteId = note.id;
     state.selectedPianoNoteIds = event.shiftKey
@@ -1290,6 +1369,10 @@
   }
 
   function startPianoSelection(event) {
+    if (state.pianoDrawMode) {
+      startPianoDrawStroke(event);
+      return;
+    }
     if (event.button !== 0 || event.target.closest(".piano-roll-note")) return;
     const grid = $("#piano-roll-grid");
     const startX = event.clientX;
@@ -6742,6 +6825,10 @@
       renderPianoRoll();
       saveState();
     });
+    $("#piano-draw-mode-button").addEventListener("click", () => {
+      state.pianoDrawMode = !state.pianoDrawMode;
+      renderPianoRoll();
+    });
     $("#piano-snap-select").addEventListener("change", (event) => {
       state.pianoSnap = Number(event.target.value);
       saveState();
@@ -6762,6 +6849,7 @@
     });
     $("#piano-scale-slider").addEventListener("change", saveState);
     $("#piano-roll-grid").addEventListener("click", (event) => {
+      if (state.pianoDrawMode) return;
       if (state.suppressPianoGridClick) {
         state.suppressPianoGridClick = false;
         return;
@@ -6918,6 +7006,7 @@
       state.pianoStartBar = 0;
       state.pianoBars = 4;
       state.pianoScale = 1;
+      state.pianoDrawMode = false;
       state.pianoSnap = 2;
       state.pianoNoteLength = 2;
       state.selectedPianoTrackId = "piano-grand";
