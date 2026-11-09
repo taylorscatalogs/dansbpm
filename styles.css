@@ -621,3 +621,12 @@ body:not(.is-beat-grid-open) #export-button { display: none; }
   .arrangement-track-header, .timeline-ruler { height: 38px; }
   .arrangement-footer { font-size: 6px; }
 }
+
+#sequencer-view .section-heading { flex-direction: row; align-items: center; gap: 8px; padding: 6px 0 4px; }
+#sequencer-view .section-heading > div:first-child { flex: 0 0 auto; }
+#sequencer-view .sequencer-actions { min-width: 0; width: 0; max-width: none; flex: 1 1 0; flex-wrap: nowrap; align-self: stretch; justify-content: flex-start; gap: 5px; overflow-x: auto; overflow-y: hidden; padding: 0 0 4px; scrollbar-color: #45464a #1b1c1f; scrollbar-width: thin; }
+#sequencer-view .sequencer-actions > * { flex: 0 0 auto; }
+#sequencer-view .sequencer-actions .quiet-button { height: 28px; padding: 0 7px; font-size: 9px; white-space: nowrap; }
+#sequencer-view .sequencer-actions .pattern-select-control { height: 28px; padding: 0 4px; }
+#sequencer-view .sequencer-actions .pattern-select-control > span { font-size: 6px; }
+#sequencer-view .sequencer-actions .pattern-select-control select { max-width: 96px; font-size: 9px; }
