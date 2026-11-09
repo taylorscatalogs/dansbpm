@@ -3469,7 +3469,47 @@
     browser.replaceChildren();
     const instruments = state.tracks.filter((track) => !track.sourceId);
     $("#drum-sound-count").textContent = String(instruments.length);
+    const families = new Map();
     instruments.forEach((track) => {
+      const family = track.family || (track.kind === "sample" ? "Imported Sounds" : "Drums");
+      let familyGroup = families.get(family);
+      if (!familyGroup) {
+        familyGroup = document.createElement("section");
+        familyGroup.className = "instrument-family-group";
+        const heading = document.createElement("h3");
+        heading.className = "instrument-family-heading";
+        heading.textContent = family;
+        familyGroup.append(heading);
+        families.set(family, familyGroup);
+        browser.append(familyGroup);
+      }
+
+      let container = familyGroup;
+      if (family === "Drums") {
+        const kindLabels = {
+          kick: "Kicks",
+          snare: "Snares",
+          clap: "Claps",
+          hat: "Closed Hi-Hats",
+          openhat: "Open Hi-Hats",
+          rim: "Rims & Percussion",
+        };
+        const kind = kindLabels[track.kind] ? track.kind : "other";
+        const subsectionKey = `drum-kind-${kind}`;
+        let subsection = familyGroup.querySelector(`[data-subsection="${subsectionKey}"]`);
+        if (!subsection) {
+          subsection = document.createElement("section");
+          subsection.className = "instrument-kind-group";
+          subsection.dataset.subsection = subsectionKey;
+          const heading = document.createElement("h4");
+          heading.className = "instrument-kind-heading";
+          heading.textContent = kindLabels[kind] || "Other Drums";
+          subsection.append(heading);
+          familyGroup.append(subsection);
+        }
+        container = subsection;
+      }
+
       const row = document.createElement("div");
       row.className = "instrument-source";
       const color = document.createElement("span");
@@ -3482,7 +3522,7 @@
       row.append(color, name);
       const soundSelect = makeSoundSelect(track, true);
       if (soundSelect) row.append(soundSelect);
-      browser.append(row);
+      container.append(row);
     });
   }
 

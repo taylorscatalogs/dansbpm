@@ -240,6 +240,11 @@ kbd { border: 1px solid #393a3f; border-radius: 3px; padding: 2px 4px; color: #b
 .instrument-section-label { margin-top: 17px; }
 .instrument-section-label span { color: #9a9ba0; }
 .instrument-browser { display: flex; flex-direction: column; gap: 5px; }
+.instrument-family-group { display: flex; flex-direction: column; gap: 4px; }
+.instrument-family-heading { margin: 8px 0 2px; border-bottom: 1px solid #303136; padding: 0 0 5px; color: #aeb0b3; font-family: var(--mono); font-size: 8px; font-weight: 600; letter-spacing: .65px; text-transform: uppercase; }
+.instrument-family-group:first-child .instrument-family-heading { margin-top: 2px; }
+.instrument-kind-group { display: flex; flex-direction: column; gap: 4px; padding-left: 5px; }
+.instrument-kind-heading { margin: 4px 0 1px; color: #818287; font-family: var(--mono); font-size: 7px; font-weight: 500; letter-spacing: .55px; text-transform: uppercase; }
 .instrument-source { min-width: 0; display: grid; grid-template-columns: 6px minmax(38px, 1fr) minmax(66px, 100px); align-items: center; gap: 6px; }
 .source-color { width: 6px; height: 6px; border-radius: 2px; }
 .instrument-source-name { overflow: hidden; color: #b6b7b8; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
