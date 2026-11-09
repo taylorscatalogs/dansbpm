@@ -3589,7 +3589,7 @@
       arrangementActions.insertBefore(patternDragSource, $("#pattern-instrument-select").parentElement);
       arrangementActions.insertBefore(addPatternButton, $("#record-audio-button"));
     }
-    $("#arrangement-heading").hidden = showSequencer;
+    $("#arrangement-heading").hidden = showSequencer || showPianoRoll;
     $("#arrangement-view").hidden = false;
     document.body.classList.toggle("is-beat-grid-open", showSequencer);
     $("#sequencer-view").hidden = !showSequencer;
