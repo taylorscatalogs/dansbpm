@@ -117,7 +117,7 @@ h1 { margin: 9px 0 4px; font-size: 28px; font-weight: 600; letter-spacing: -1.05
 .quiet-button { display: flex; align-items: center; gap: 7px; height: 32px; border: 1px solid var(--stroke); border-radius: 6px; background: #1a1b1e; padding: 0 10px; color: #b4b5ba; font-size: 11px; cursor: pointer; }
 .quiet-button:hover { background: var(--panel-hover); color: var(--text); }
 .quiet-button svg { width: 14px; height: 14px; }
-.assets-open-button { flex: 0 0 auto; white-space: nowrap; }
+.assets-open-button { flex: 0 0 auto; margin-left: 12px; white-space: nowrap; }
 .workspace-play-button { height: 30px; gap: 7px; border-color: var(--accent); border-radius: 6px; background: var(--accent); padding: 0 10px; color: #171a0f; font-weight: 600; }
 .workspace-play-button:hover { border-color: #dfff7b; background: #dfff7b; color: #171a0f; }
 .workspace-play-button .play-icon { margin-left: 1px; border-top-width: 5px; border-bottom-width: 5px; border-left-width: 7px; }
@@ -619,6 +619,7 @@ body:not(.is-beat-grid-open) #export-button { display: none; }
 .source-browser-dialog {
   position: fixed;
   inset: 0 auto 0 0;
+  z-index: 1000;
   width: min(320px, 72vw);
   height: 100dvh;
   max-height: 100dvh;
@@ -644,6 +645,8 @@ body:not(.is-beat-grid-open) #export-button { display: none; }
   body:has(#arrangement-view:not([hidden])) .transport-panel { min-height: 58px; flex-basis: 58px; flex-wrap: nowrap; padding: 0; }
   body:has(#arrangement-view:not([hidden])) .transport-panel .transport-divider { margin: 0 10px; }
   body:has(#arrangement-view:not([hidden])) .transport-right { display: flex; }
+  body:has(#arrangement-view:not([hidden])) .transport-right .now-playing,
+  body:has(#arrangement-view:not([hidden])) .transport-right .transport-divider-small { display: none; }
   .arrangement-heading { align-items: flex-start; flex-direction: column; gap: 4px; padding: 6px 2px; }
   .arrangement-actions { width: 100%; justify-content: flex-start; }
   .arrangement-editor { grid-template-columns: 132px minmax(0, 1fr); }
@@ -653,6 +656,7 @@ body:not(.is-beat-grid-open) #export-button { display: none; }
   body:has(#arrangement-view:not([hidden])) .app-shell { padding: 0 4px; }
   body:has(#arrangement-view:not([hidden])) .transport-panel { min-height: 88px; flex-basis: 88px; flex-wrap: wrap; row-gap: 0; }
   body:has(#arrangement-view:not([hidden])) .transport-left { width: 100%; height: 43px; flex: 0 0 100%; justify-content: flex-start; }
+  body:has(#arrangement-view:not([hidden])) .assets-open-button { margin-left: 8px; }
   body:has(#arrangement-view:not([hidden])) .transport-right { display: none; }
   .arrangement-heading { gap: 5px; }
   .arrangement-actions { gap: 4px; }
