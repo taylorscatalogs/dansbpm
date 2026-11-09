@@ -82,6 +82,11 @@ input[type="range"]::-webkit-slider-thumb { appearance: none; width: 10px; heigh
 input[type="range"]::-moz-range-thumb { width: 7px; height: 7px; border: 2px solid var(--page); border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .transport-panel .transport-divider-small { height: 27px; margin: 0 20px; }
 .length-control { display: flex; flex-direction: column; gap: 6px; }
+.step-length-control { height: 28px; flex-direction: row; align-items: center; gap: 5px; border: 1px solid var(--stroke); border-radius: 5px; background: #1a1b1e; padding: 0 5px; }
+.step-length-control .control-caption { font-size: 6px; white-space: nowrap; }
+.step-length-control .segmented-control { padding: 1px; }
+.step-length-control .length-button { padding: 4px 6px; }
+.step-length-control .length-value { min-width: 39px; font-size: 8px; }
 .length-value { min-width: 46px; color: #b7b8b4; font-family: var(--mono); font-size: 9px; text-align: center; }
 .length-button:disabled { opacity: .35; cursor: default; }
 .segmented-control { display: flex; padding: 2px; border: 1px solid var(--stroke); border-radius: 6px; background: #18191c; }

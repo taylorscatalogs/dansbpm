@@ -61,15 +61,6 @@
               <span class="swing-value" id="swing-value">0%</span>
               <input id="swing-slider" type="range" min="0" max="45" value="0" aria-label="Swing amount" />
             </label>
-            <span class="transport-divider transport-divider-small"></span>
-            <div class="length-control" role="group" aria-label="Pattern length">
-              <span class="control-caption">LENGTH</span>
-              <div class="segmented-control">
-                <button class="length-button" id="decrease-pattern-bars" type="button" aria-label="Remove one bar">−</button>
-                <span class="length-value" id="pattern-bars-value">1 BAR</span>
-                <button class="length-button" id="increase-pattern-bars" type="button" aria-label="Add one bar">+</button>
-              </div>
-            </div>
           </div>
           <div class="transport-right">
             <span class="now-playing" id="now-playing"><span class="live-dot"></span>READY TO PLAY</span>
@@ -149,7 +140,7 @@
                     <section class="workspace workspace-tool-panel" id="sequencer-view" role="tabpanel" aria-labelledby="sequencer-tab" hidden>
                       <div class="section-heading">
                         <div>
-                          <div class="eyebrow">STEP <span class="heading-dot"></span> <span id="bar-label">1 BAR</span></div>
+                          <div class="eyebrow">STEP <span class="heading-dot"></span></div>
                         </div>
                         <div class="sequencer-actions" id="sequencer-actions">
                           <button class="quiet-button workspace-play-button" id="sequencer-workspace-play-button" type="button" aria-label="Play step sequencer workspace" aria-pressed="false"><span class="play-icon" aria-hidden="true"></span><span class="workspace-play-label">Play</span></button>
@@ -166,6 +157,14 @@
                               <option value="1/32">1/32</option>
                             </select>
                           </label>
+                          <div class="length-control step-length-control" role="group" aria-label="Step grid length">
+                            <span class="control-caption">LENGTH</span>
+                            <div class="segmented-control">
+                              <button class="length-button" id="decrease-pattern-bars" type="button" aria-label="Remove one bar from step grid">−</button>
+                              <span class="length-value" id="pattern-bars-value">1 BAR</span>
+                              <button class="length-button" id="increase-pattern-bars" type="button" aria-label="Add one bar to step grid">+</button>
+                            </div>
+                          </div>
                           <label class="scale-control">
                             <span>SCALE</span>
                             <input id="sequencer-scale-slider" type="range" min="50" max="200" step="10" value="100" aria-label="Step grid scale">

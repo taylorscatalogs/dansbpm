@@ -498,7 +498,6 @@
   function renderPatternLengthControls() {
     const bars = state.steps / 16;
     const label = `${bars} ${bars === 1 ? "BAR" : "BARS"}`;
-    $("#bar-label").textContent = label;
     $("#pattern-bars-value").textContent = label;
     $("#decrease-pattern-bars").disabled = bars <= 1;
     $("#increase-pattern-bars").disabled = bars >= MAX_PATTERN_BARS;
