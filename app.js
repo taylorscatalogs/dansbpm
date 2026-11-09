@@ -230,6 +230,7 @@
     selectedStepCells: new Set(),
     selectedMixerTrackId: null,
     selectedMixerEffectId: null,
+    arrangementDrag: null,
     mixerEffectAnimation: null,
     mixerEffectDialogTrackId: null,
     clipboard: null,
@@ -3561,6 +3562,48 @@
     saveState();
   }
 
+  function beginArrangementItemDrag(event, element, type, durationBars) {
+    clearArrangementDragPreview();
+    const preview = element.cloneNode(true);
+    preview.classList.remove("is-selected");
+    preview.querySelectorAll(".clip-resize-handle").forEach((handle) => handle.remove());
+    preview.classList.add("arrangement-drag-preview");
+    preview.setAttribute("aria-hidden", "true");
+    preview.draggable = false;
+    state.arrangementDrag = { type, durationBars, preview, dragImage: null };
+    if (event.dataTransfer) {
+      const transparentImage = document.createElement("canvas");
+      transparentImage.width = 1;
+      transparentImage.height = 1;
+      transparentImage.style.position = "fixed";
+      transparentImage.style.left = "-2px";
+      document.body.append(transparentImage);
+      event.dataTransfer.setDragImage(transparentImage, 0, 0);
+      state.arrangementDrag.dragImage = transparentImage;
+    }
+    element.addEventListener("dragend", clearArrangementDragPreview, { once: true });
+  }
+
+  function updateArrangementDragPreview(event, lane) {
+    const drag = state.arrangementDrag;
+    if (!drag) return;
+    let preview = lane.querySelector(":scope > .arrangement-drag-preview");
+    if (!preview) {
+      preview = drag.preview.cloneNode(true);
+      lane.append(preview);
+    }
+    const startBar = clampArrangementStart(barAtPointer(event, lane), drag.durationBars);
+    preview.style.left = `${startBar * BAR_WIDTH + 4}px`;
+    preview.style.width = `${Math.max(28, drag.durationBars * BAR_WIDTH - 8)}px`;
+  }
+
+  function clearArrangementDragPreview() {
+    state.arrangementDrag?.dragImage?.remove();
+    document.querySelectorAll(".arrangement-drag-preview").forEach((preview) => preview.remove());
+    document.querySelectorAll(".timeline-lane.is-drop-target").forEach((lane) => lane.classList.remove("is-drop-target"));
+    state.arrangementDrag = null;
+  }
+
   function createTimelineLane(trackId, width) {
     const lane = document.createElement("div");
     lane.className = "timeline-lane";
@@ -3586,14 +3629,19 @@
           transferTypes.includes("application/x-pulsegrid-mel-source");
         event.dataTransfer.dropEffect = isCopy ? "copy" : "move";
       }
+      updateArrangementDragPreview(event, lane);
     });
     lane.addEventListener("dragleave", (event) => {
-      if (!lane.contains(event.relatedTarget)) lane.classList.remove("is-drop-target");
+      if (!lane.contains(event.relatedTarget)) {
+        lane.classList.remove("is-drop-target");
+        lane.querySelector(":scope > .arrangement-drag-preview")?.remove();
+      }
     });
     lane.addEventListener("drop", async (event) => {
       event.preventDefault();
       lane.classList.remove("is-drop-target");
       const startBar = barAtPointer(event, lane);
+      clearArrangementDragPreview();
       const isPatternLane = trackId.startsWith("pattern:");
       const files = Array.from(event.dataTransfer?.files || []);
       if (files.length) {
@@ -3702,6 +3750,80 @@
     document.addEventListener("pointercancel", finish);
   }
 
+  function makeActivityWaveform(values) {
+    const waveform = document.createElement("span");
+    waveform.className = "clip-waveform clip-activity-waveform";
+    values.forEach((value) => {
+      const bar = document.createElement("i");
+      bar.style.height = `${Math.max(5, Math.round(value * 100))}%`;
+      waveform.append(bar);
+    });
+    return waveform;
+  }
+
+  function getPatternActivityWaveform(pattern, clip, durationBars) {
+    const patternBars = pattern.steps / 16;
+    const sourceOffset = clip.sourceOffsetBars || 0;
+    const playableBars = Math.min(durationBars, Math.max(0, patternBars * (clip.repeatCount || 1) - sourceOffset));
+    const stepsPerLoop = getGridStepCount(pattern);
+    const tracks = getPatternTrackIds(pattern);
+    return Array.from({ length: 48 }, (_, index) => {
+      const position = (index + 0.5) / 48 * durationBars;
+      if (!tracks.length || position >= playableBars) return 0;
+      const sourcePosition = (sourceOffset + position) % patternBars;
+      const step = Math.min(stepsPerLoop - 1, Math.floor(sourcePosition / patternBars * stepsPerLoop));
+      const active = tracks.reduce((count, trackId) => count + (pattern.cells?.[trackId]?.[step] ? 1 : 0), 0);
+      return active / tracks.length;
+    });
+  }
+
+  function getMelActivityWaveform(mel, clip, durationBars) {
+    const sourceOffset = clip.sourceOffsetBars || 0;
+    return Array.from({ length: 48 }, (_, index) => {
+      const position = sourceOffset + (index + 0.5) / 48 * durationBars;
+      return mel.notes.reduce((level, note) => {
+        const start = note.startTick / PIANO_TICKS_PER_BAR;
+        const end = start + note.durationTicks / PIANO_TICKS_PER_BAR;
+        return position >= start && position < end ? Math.max(level, note.velocity || 0.8) : level;
+      }, 0);
+    });
+  }
+
+  function updatePatternClipRepeatMarkers(element, clip, pattern, durationBars) {
+    element.querySelector(".pattern-repeat-overlay")?.remove();
+    const overlay = document.createElement("span");
+    overlay.className = "pattern-repeat-overlay";
+    const patternBars = pattern.steps / 16;
+    const playbackBars = Math.min(durationBars, Math.max(0, patternBars * (clip.repeatCount || 1) - (clip.sourceOffsetBars || 0)));
+    for (let boundary = patternBars - (clip.sourceOffsetBars || 0); boundary < playbackBars - 0.001; boundary += patternBars) {
+      const divider = document.createElement("span");
+      divider.className = "pattern-repeat-divider";
+      divider.style.left = `${Math.max(0, boundary * BAR_WIDTH - 4)}px`;
+      overlay.append(divider);
+    }
+    if (durationBars > playbackBars + 0.001) {
+      const extension = document.createElement("span");
+      extension.className = "pattern-extension-region";
+      extension.style.left = `${Math.max(0, playbackBars * BAR_WIDTH - 4)}px`;
+      extension.style.width = `${Math.max(0, (durationBars - playbackBars) * BAR_WIDTH)}px`;
+      overlay.append(extension);
+    }
+    element.append(overlay);
+  }
+
+  function updateClipResizeIndicator(element, mode, clip, durationBars, initialDuration) {
+    let indicator = element.querySelector(".clip-resize-indicator");
+    if (!indicator) {
+      indicator = document.createElement("span");
+      indicator.className = "clip-resize-indicator";
+      element.append(indicator);
+    }
+    if (mode === "repeat") indicator.textContent = `REPEAT ×${clip.repeatCount || 1}`;
+    else indicator.textContent = durationBars > initialDuration + 0.001
+      ? "EXTEND · SILENT"
+      : durationBars < initialDuration - 0.001 ? "TRIM" : "LENGTH";
+  }
+
   function makeArrangementResizeHandle(type, clip, track, element, labelElement, mode = "length") {
     const handle = document.createElement("button");
     const name = type === "pattern" ? getPattern(clip.patternId)?.name || "pattern"
@@ -3731,6 +3853,7 @@
       } else if (type === "pattern") {
         const pattern = getPattern(clip.patternId);
         labelElement.textContent = `${(pattern?.name || "DRUM PATTERN").toUpperCase()} · ${duration.toFixed(2)} BAR${duration === 1 ? "" : "S"}`;
+        if (pattern) updatePatternClipRepeatMarkers(element, clip, pattern, duration);
       }
       element.setAttribute("aria-label", `${name}, bar ${clip.startBar + 1}, ${duration.toFixed(2)} bars; drag to move or resize`);
     };
@@ -3768,6 +3891,7 @@
       const initialDuration = getArrangementClipDuration(type, clip);
       let changed = false;
       element.draggable = false;
+      updateClipResizeIndicator(element, mode, clip, initialDuration, initialDuration);
       const onMove = (moveEvent) => {
         const maxDuration = MAX_ARRANGEMENT_BARS - clip.startBar;
         const minDuration = Math.min(state.arrangementSnap ? 0.25 : 0.01, maxDuration);
@@ -3775,12 +3899,14 @@
           snapArrangementBar(initialDuration + (moveEvent.clientX - startX) / BAR_WIDTH)));
         changed ||= Math.abs(next - getArrangementClipDuration(type, clip)) > 0.0001;
         updateDuration(next);
+        updateClipResizeIndicator(element, mode, clip, getArrangementClipDuration(type, clip), initialDuration);
       };
       const onEnd = () => {
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onEnd);
         document.removeEventListener("pointercancel", onEnd);
         element.draggable = true;
+        element.querySelector(".clip-resize-indicator")?.remove();
         finishResize(changed);
       };
       document.addEventListener("pointermove", onMove);
@@ -3830,6 +3956,7 @@
       if (!(event.shiftKey && (event.ctrlKey || event.metaKey))) selectArrangementItem("audio", clip.id, event);
       event.dataTransfer?.setData("application/x-pulsegrid-audio-clip", JSON.stringify({ clipId: clip.id, sourceTrackId: track.id }));
       if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      beginArrangementItemDrag(event, element, "audio", durationBars);
     });
     element.addEventListener("click", (event) => {
       if (event.target.closest(".clip-resize-handle")) return;
@@ -3859,11 +3986,13 @@
     name.textContent = `${mel.name.toUpperCase()} · ${Number(bars.toFixed(2))} BAR${bars === 1 ? "" : "S"}`;
     element.setAttribute("aria-label", `${mel.name}, bar ${clip.startBar + 1}, ${bars.toFixed(2)} bars; drag to move or resize`);
     const resizeHandle = makeArrangementResizeHandle("mel", clip, track, element, name);
+    const waveform = makeActivityWaveform(getMelActivityWaveform(mel, clip, bars));
     element.addEventListener("dragstart", (event) => {
       selectArrangementTrack(track.id);
       if (!(event.shiftKey && (event.ctrlKey || event.metaKey))) selectArrangementItem("mel", clip.id, event);
       event.dataTransfer?.setData("application/x-pulsegrid-mel-clip", JSON.stringify({ clipId: clip.id, sourceTrackId: track.id }));
       if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      beginArrangementItemDrag(event, element, "mel", bars);
     });
     element.addEventListener("click", (event) => {
       if (event.target.closest(".clip-resize-handle")) return;
@@ -3872,7 +4001,7 @@
       if (!selectArrangementItem("mel", clip.id, event)) return;
       setArrangementCursor(clip.startBar);
     });
-    element.append(name, resizeHandle);
+    element.append(waveform, name, resizeHandle);
     return element;
   }
 
@@ -3886,6 +4015,7 @@
     const totalBars = getArrangementClipDuration("pattern", clip);
     const displayBars = Number(totalBars.toFixed(2));
     element.style.setProperty("--pattern-color", pattern?.color || "var(--accent)");
+    element.style.setProperty("--clip-color", pattern?.color || "var(--accent)");
     element.draggable = true;
     element.style.left = `${clip.startBar * BAR_WIDTH + 4}px`;
     element.style.width = `${Math.max(28, totalBars * BAR_WIDTH - 8)}px`;
@@ -3898,10 +4028,14 @@
     text.textContent = `${patternName.toUpperCase()} · ${displayBars} BAR${displayBars === 1 ? "" : "S"}`;
     const repeatHandle = makeArrangementResizeHandle("pattern", clip, null, element, text, "repeat");
     const resizeHandle = makeArrangementResizeHandle("pattern", clip, null, element, text);
+    const waveform = pattern
+      ? makeActivityWaveform(getPatternActivityWaveform(pattern, clip, totalBars))
+      : makeActivityWaveform([]);
     element.addEventListener("dragstart", (event) => {
       if (!(event.shiftKey && (event.ctrlKey || event.metaKey))) selectArrangementItem("pattern", clip.id, event);
       event.dataTransfer?.setData("application/x-pulsegrid-pattern-clip", JSON.stringify({ clipId: clip.id }));
       if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      beginArrangementItemDrag(event, element, "pattern", totalBars);
     });
     element.addEventListener("click", (event) => {
       if (event.target.closest(".clip-resize-handle")) return;
@@ -3909,7 +4043,8 @@
       if (!selectArrangementItem("pattern", clip.id, event)) return;
       setArrangementCursor(clip.startBar);
     });
-    element.append(icon, text, repeatHandle, resizeHandle);
+    element.append(waveform, icon, text, repeatHandle, resizeHandle);
+    if (pattern) updatePatternClipRepeatMarkers(element, clip, pattern, totalBars);
     return element;
   }
 

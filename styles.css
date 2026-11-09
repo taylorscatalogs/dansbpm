@@ -288,16 +288,22 @@ kbd { border: 1px solid #393a3f; border-radius: 3px; padding: 2px 4px; color: #b
 .timeline-lane.is-drop-target { background-color: rgba(211,243,107,.06); }
 .drum-arrangement-clip { position: absolute; top: 12px; bottom: 12px; display: flex; align-items: center; gap: 8px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--pattern-color), transparent 56%); border-radius: 5px; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--pattern-color), transparent 82%) 0, color-mix(in srgb, var(--pattern-color), transparent 82%) 6px, color-mix(in srgb, var(--pattern-color), transparent 91%) 6px, color-mix(in srgb, var(--pattern-color), transparent 91%) 12px); padding: 0 7px; color: color-mix(in srgb, var(--pattern-color), white 35%); font-size: 10px; font-weight: 600; white-space: nowrap; cursor: grab; }
 .drum-arrangement-clip.is-selected, .mel-arrangement-clip.is-selected, .audio-clip.is-selected { outline: 2px solid #fff; outline-offset: 1px; filter: brightness(1.2); }
-.pattern-clip-icon { display: grid; place-items: center; }
+.pattern-clip-icon { position: relative; z-index: 2; display: grid; place-items: center; }
 .drum-arrangement-clip svg { width: 14px; height: 14px; flex: 0 0 auto; fill: none; stroke: var(--pattern-color); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.pattern-clip-name { overflow: hidden; text-overflow: ellipsis; }
+.pattern-clip-name { position: relative; z-index: 2; overflow: hidden; text-overflow: ellipsis; }
 .mel-arrangement-clip { position: absolute; top: 12px; bottom: 12px; display: flex; align-items: center; overflow: hidden; border: 1px solid color-mix(in srgb, var(--clip-color), transparent 38%); border-radius: 5px; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--clip-color), transparent 72%) 0, color-mix(in srgb, var(--clip-color), transparent 72%) 6px, color-mix(in srgb, var(--clip-color), transparent 86%) 6px, color-mix(in srgb, var(--clip-color), transparent 86%) 12px); padding: 0 8px; color: color-mix(in srgb, var(--clip-color), white 48%); font-size: 9px; font-weight: 600; white-space: nowrap; cursor: grab; }
 .mel-arrangement-clip:hover { filter: brightness(1.15); }
-.mel-clip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mel-clip-name { position: relative; z-index: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .new-track-drop-label { color: #8d8e94; font-size: 10px; }
 .new-track-drop-lane { display: flex; align-items: center; justify-content: center; border: 1px dashed #383940; background-color: #1b1c1f; color: #777980; font-family: var(--mono); font-size: 9px; letter-spacing: .5px; }
 .new-track-drop-lane.is-drop-target { border-color: var(--accent); color: #e2edbc; }
 .new-track-drop-lane > span { pointer-events: none; }
+.arrangement-drag-preview { z-index: 10; top: 8px !important; bottom: 8px !important; height: auto !important; border-style: dashed !important; box-shadow: 0 0 0 2px rgba(211,243,107,.32), 0 6px 18px #0009; filter: brightness(1.25); opacity: .84; pointer-events: none; }
+.arrangement-drag-preview::after { position: absolute; top: 2px; right: 4px; z-index: 5; border-radius: 3px; background: rgba(15,16,18,.82); padding: 2px 4px; color: var(--accent); content: "MOVE"; font: 7px var(--mono); letter-spacing: .4px; }
+.pattern-repeat-overlay { position: absolute; z-index: 1; inset: 0; overflow: hidden; pointer-events: none; }
+.pattern-repeat-divider { position: absolute; top: 0; bottom: 0; border-left: 1px dashed color-mix(in srgb, var(--pattern-color), white 18%); opacity: .9; }
+.pattern-extension-region { position: absolute; top: 0; bottom: 0; border-left: 1px solid color-mix(in srgb, var(--pattern-color), white 30%); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--pattern-color), transparent 68%) 0 5px, transparent 5px 10px); opacity: .8; }
+.clip-resize-indicator { position: absolute; top: 3px; right: 14px; z-index: 5; border: 1px solid rgba(211,243,107,.6); border-radius: 3px; background: rgba(17,18,20,.9); padding: 2px 4px; color: var(--accent); font: 7px var(--mono); letter-spacing: .35px; pointer-events: none; }
 .midi-arrangement-clip { position: absolute; top: 12px; bottom: 12px; display: flex; align-items: center; overflow: hidden; border: 1px solid #7565b7; border-radius: 5px; background: repeating-linear-gradient(135deg, #5b4b8b88 0, #5b4b8b88 6px, #362e50 6px, #362e50 12px); padding: 0 8px; color: #ddd4ff; font-family: var(--mono); font-size: 8px; white-space: nowrap; }
 .clip-resize-handle { width: 9px; height: 28px; flex: 0 0 9px; align-self: center; margin-left: auto; border: 0; border-right: 2px solid currentColor; background: transparent; padding: 0; opacity: .65; cursor: ew-resize; touch-action: none; }
 .clip-resize-handle:hover, .clip-resize-handle:focus-visible { opacity: 1; }
@@ -307,7 +313,7 @@ kbd { border: 1px solid #393a3f; border-radius: 3px; padding: 2px 4px; color: #b
 .audio-clip { position: absolute; top: 11px; height: 52px; display: flex; align-items: center; overflow: hidden; border: 1px solid color-mix(in srgb, var(--clip-color), transparent 40%); border-radius: 5px; background: color-mix(in srgb, var(--clip-color), #17181a 83%); padding: 0 7px; color: #e4e4e1; cursor: grab; user-select: none; }
 .audio-clip:hover { filter: brightness(1.16); }
 .audio-clip:active { cursor: grabbing; }
-.clip-waveform { position: absolute; inset: 3px 4px; display: flex; align-items: center; justify-content: space-around; gap: 1px; opacity: .38; pointer-events: none; }
+.clip-waveform { position: absolute; z-index: 0; inset: 3px 4px; display: flex; align-items: center; justify-content: space-around; gap: 1px; opacity: .58; pointer-events: none; }
 .clip-waveform i { width: 2px; min-height: 2px; border-radius: 2px; background: var(--clip-color); }
 .clip-name { position: relative; z-index: 1; overflow: hidden; max-width: calc(100% - 24px); text-shadow: 0 1px 5px #000; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; font-weight: 600; }
 .audio-clip .clip-resize-handle { position: relative; z-index: 2; color: var(--clip-color); }
