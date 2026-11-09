@@ -3999,13 +3999,16 @@
       showToast("That audio asset is no longer available.");
       return;
     }
-    const destination = state.arrangementTracks.find((track) => track.id === destinationTrackId)
-      || createArrangementTrack(sourceTrack.name);
     const clip = {
       ...sourceClip,
       id: makeId(),
       startBar: clampArrangementStart(startBar, getArrangementClipDuration("audio", sourceClip)),
     };
+    const destination = state.arrangementTracks.find((track) => track.id === destinationTrackId)
+      || createArrangementTrack(clip.name || sourceTrack.name);
+    if (!destination.clips.length && /^Track \d+$/.test(destination.name)) {
+      destination.name = clip.name || sourceTrack.name;
+    }
     destination.clips.push(clip);
     destination.clips.sort((left, right) => left.startBar - right.startBar);
     updateArrangementLength();
@@ -5246,7 +5249,8 @@
       await ensureAudio();
       const buffer = await state.audioContext.decodeAudioData(await file.arrayBuffer());
       let track = state.arrangementTracks.find((item) => item.id === trackId);
-      if (!track) track = createArrangementTrack(file.name.replace(/\.[^.]+$/, "") || "Audio track");
+      if (!track) track = createArrangementTrack(file.name);
+      else if (!track.clips.length && /^Track \d+$/.test(track.name)) track.name = file.name;
       const clip = {
         id: makeId(), name: file.name, buffer,
         durationSeconds: buffer.duration,
