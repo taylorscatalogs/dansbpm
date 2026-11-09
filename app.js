@@ -293,7 +293,6 @@
   const trackList = $("#track-list");
   const stepsHeader = $("#steps-header");
   const sequencerGridScroll = $("#sequencer-grid-scroll");
-  const patternCards = $("#pattern-cards");
   const playButton = $("#play-button");
   const tempoValue = $("#tempo-value");
   const swingSlider = $("#swing-slider");
@@ -1624,16 +1623,10 @@
   }
 
   function renderPresets() {
-    patternCards.innerHTML = "";
+    const select = $("#preload-pattern-select");
+    select.replaceChildren(new Option("Preload", ""));
     PRESETS.forEach((preset) => {
-      const card = document.createElement("button");
-      card.className = `pattern-card${state.selectedPreset === preset.id ? " is-selected" : ""}`;
-      card.type = "button";
-      card.style.setProperty("--pattern-color", preset.color);
-      card.setAttribute("aria-pressed", String(state.selectedPreset === preset.id));
-      card.innerHTML = `<span class="pattern-card-tag">${preset.tag}</span><span class="pattern-card-title">${preset.title}</span><span class="pattern-card-description">${preset.description}</span>`;
-      card.addEventListener("click", () => loadPreset(preset));
-      patternCards.append(card);
+      select.add(new Option(`${preset.title} — ${preset.description}`, preset.id));
     });
   }
 
@@ -5464,7 +5457,7 @@
   function exportPattern() {
     const activePattern = getPattern();
     const pattern = {
-      app: "Pulsegrid",
+      app: "DansBPM",
       version: 1,
       exportedAt: new Date().toISOString(),
       tempo: state.bpm,
@@ -5484,7 +5477,7 @@
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "pulsegrid-pattern.json";
+    link.download = "dansbpm-pattern.json";
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     showToast("Pattern exported as JSON");
@@ -5612,7 +5605,7 @@
       }
 
       const rendered = await context.startRendering();
-      downloadBlob(encodeWav(rendered), "pulsegrid-song.wav");
+      downloadBlob(encodeWav(rendered), "dansbpm-song.wav");
       showToast("Song exported as WAV");
     } catch (error) {
       showToast(`Could not export the song: ${error.message || "render failed"}`);
@@ -5677,35 +5670,6 @@
     link.download = filename;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  function randomize() {
-    const includedTrackIds = new Set(getPatternTrackIds(getPattern()));
-    const activeTracks = state.tracks.filter((track) => includedTrackIds.has(track.id));
-    const slotsPerBar = getStepsPerBar();
-    const stepsPerBeat = Math.max(1, slotsPerBar / 4);
-    const stepsPerEighth = Math.max(1, slotsPerBar / 8);
-    state.tracks.forEach((track) => track.cells.fill(false));
-    for (let step = 0; step < getGridStepCount(); step += 1) {
-      const stepInBar = step % slotsPerBar;
-      activeTracks.forEach((track) => {
-        const sourceId = track.sourceId || track.id;
-        if (sourceId === "kick" && stepInBar % stepsPerBeat === 0 && Math.random() > (stepInBar % (stepsPerBeat * 2) === 0 ? 0.08 : 0.27)) track.cells[step] = true;
-        if (sourceId === "snare" && (stepInBar === stepsPerBeat || stepInBar === stepsPerBeat * 3) && Math.random() > 0.16) track.cells[step] = true;
-        if (sourceId === "closed-hat" && stepInBar % stepsPerEighth === 0 && Math.random() > 0.28) track.cells[step] = true;
-        if (sourceId === "open-hat" &&
-          (stepInBar === Math.min(slotsPerBar - 1, Math.round(slotsPerBar * 0.375)) ||
-            stepInBar === Math.min(slotsPerBar - 1, Math.round(slotsPerBar * 0.875))) &&
-          Math.random() > 0.42) track.cells[step] = true;
-        if (sourceId === "rim" && stepInBar % stepsPerBeat === stepsPerBeat - 1 && Math.random() > 0.48) track.cells[step] = true;
-        if (sourceId === "clap" && stepInBar === stepsPerBeat && Math.random() > 0.6) track.cells[step] = true;
-      });
-    }
-    state.selectedPreset = null;
-    renderTracks();
-    renderPresets();
-    saveState();
-    showToast("A new groove, just for you");
   }
 
   function clearPattern() {
@@ -5773,7 +5737,10 @@
     $("#decrease-pattern-bars").addEventListener("click", () => setLength(state.steps - 16));
     $("#increase-pattern-bars").addEventListener("click", () => setLength(state.steps + 16));
     $("#clear-button").addEventListener("click", clearPattern);
-    $("#randomize-button").addEventListener("click", randomize);
+    $("#preload-pattern-select").addEventListener("change", (event) => {
+      const preset = PRESETS.find((item) => item.id === event.target.value);
+      if (preset) loadPreset(preset);
+    });
     $("#export-button").addEventListener("click", exportPattern);
     $("#export-song-button").addEventListener("click", exportArrangementWav);
     $("#metronome-button").addEventListener("click", toggleMetronome);

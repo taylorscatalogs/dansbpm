@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#111214" />
-    <title>Pulsegrid — Browser DAW</title>
+    <title>DansBPM — Browser DAW</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -16,9 +16,9 @@
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="#" aria-label="Pulsegrid home">
+        <a class="brand" href="#" aria-label="DansBPM home">
           <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-          <span>pulse<span class="brand-light">grid</span></span>
+          <span>dans<span class="brand-light">bpm</span></span>
         </a>
         <span class="topbar-divider"></span>
         <button class="project-name" id="project-name" type="button" title="Open project menu" aria-haspopup="dialog">
@@ -174,10 +174,9 @@
                             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 6h11m-9.5 0 .6 10h5.8l.6-10M8 6V4h4v2m-3 3v4m2-4v4" /></svg>
                             Clear
                           </button>
-                          <button class="quiet-button" id="randomize-button" type="button">
-                            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M14 4h3v3m0-3-4.2 4.2M6 14l-3 3m11-1h3v-3m0 3-4.2-4.2M3 3l3 3" /></svg>
-                            Surprise me
-                          </button>
+                          <select class="quiet-button preload-pattern-select" id="preload-pattern-select" aria-label="Preload drum pattern" title="Preload drum pattern">
+                            <option value="">Preload</option>
+                          </select>
                         </div>
                       </div>
                       <div class="sequencer-card">
@@ -193,16 +192,6 @@
                           <span class="grid-hint"><kbd>SPACE</kbd> play / stop <span class="hint-divider">·</span> click steps to edit</span>
                         </div>
                       </div>
-                      <section class="patterns-section" aria-labelledby="patterns-title">
-                        <div class="patterns-heading">
-                          <div>
-                            <div class="eyebrow">START SOMEWHERE</div>
-                            <h2 id="patterns-title">Quick patterns</h2>
-                          </div>
-                          <span class="patterns-note">Pick one, then make it yours</span>
-                        </div>
-                        <div class="pattern-cards" id="pattern-cards"></div>
-                      </section>
                       <footer class="bottom-bar">
                         <span><span class="footer-pulse"></span>Patterns and imported recordings are saved in this browser.</span>
                         <button id="reset-session" type="button">Reset session</button>
