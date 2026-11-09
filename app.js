@@ -1107,7 +1107,7 @@
         resize.className = "piano-roll-note-resize";
         element.append(resize);
         element.addEventListener("pointerdown", (event) => {
-          if (state.pianoDrawMode) startPianoDrawStroke(event);
+          if (state.pianoDrawMode) startPianoDrawStroke(event, note);
           else startPianoNoteEdit(event, note, event.target === resize);
         });
         grid.append(element);
@@ -1137,7 +1137,7 @@
     };
   }
 
-  function startPianoDrawStroke(event) {
+  function startPianoDrawStroke(event, tappedNote = null) {
     if (event.button !== 0 || !state.pianoDrawMode || !getPianoTrack()) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1154,6 +1154,8 @@
       cells: new Set(),
       existingCells: new Set(state.pianoNotes.map((note) => `${note.trackId}:${note.startTick}:${note.midi}`)),
       lastPosition: null,
+      startX: event.clientX,
+      startY: event.clientY,
     };
     const placeNote = (clientX, clientY) => {
       const note = makePianoNoteFromPointer({ clientX, clientY });
@@ -1190,6 +1192,11 @@
       document.removeEventListener("pointermove", draw);
       document.removeEventListener("pointerup", finish);
       document.removeEventListener("pointercancel", finish);
+      if (finishEvent.type === "pointerup" && tappedNote && !stroke.cells.size &&
+        Math.hypot(finishEvent.clientX - stroke.startX, finishEvent.clientY - stroke.startY) < 4) {
+        deleteSelectedPianoNotes(new Set([tappedNote.id]));
+        return;
+      }
       if (!stroke.cells.size) return;
       updateArrangementLength();
       renderArrangement();
@@ -1252,10 +1259,12 @@
     }));
     const startX = event.clientX;
     const startY = event.clientY;
+    let moved = false;
     const durationTicks = note.durationTicks;
     const totalTicks = state.pianoBars * PIANO_TICKS_PER_BAR;
     const noteElements = new Map(Array.from(document.querySelectorAll(".piano-roll-note"), (item) => [item.dataset.noteId, item]));
     const update = (moveEvent) => {
+      moved ||= Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) >= 4;
       const delta = Math.round((moveEvent.clientX - startX) / getPianoTickWidth() / state.pianoSnap) * state.pianoSnap;
       if (resizing) {
         note.durationTicks = Math.max(1, Math.min(totalTicks - note.startTick, Math.round((durationTicks + delta) / state.pianoSnap) * state.pianoSnap));
@@ -1283,10 +1292,17 @@
         if (resizeHandle) target.append(resizeHandle);
       });
     };
-    const finish = () => {
+    const finish = (finishEvent) => {
       document.removeEventListener("pointermove", update);
       document.removeEventListener("pointerup", finish);
       document.removeEventListener("pointercancel", finish);
+      moved ||= Math.hypot(finishEvent.clientX - startX, finishEvent.clientY - startY) >= 4;
+      if (finishEvent.type === "pointerup" && !resizing && !moved) {
+        state.suppressPianoGridClick = true;
+        window.setTimeout(() => { state.suppressPianoGridClick = false; }, 0);
+        deleteSelectedPianoNotes(new Set([note.id]));
+        return;
+      }
       state.suppressPianoGridClick = true;
       window.setTimeout(() => { state.suppressPianoGridClick = false; }, 0);
       updateArrangementLength();
