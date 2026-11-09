@@ -4079,11 +4079,9 @@
   function createPatternLaneCopy(source) {
     captureCurrentPattern();
     const currentSource = getPattern(source.id) || source;
-    let number = state.patterns.length + 1;
-    while (state.patterns.some((pattern) => pattern.name === `Pattern ${number}`)) number += 1;
     const pattern = {
       id: makeId(),
-      name: `Pattern ${number}`,
+      name: currentSource.name,
       kind: "pattern",
       color: getPatternColor(state.patterns.length),
       steps: currentSource.steps,
@@ -5062,8 +5060,7 @@
         if (state.selectedMixerTrackId === DEFAULT_ARRANGEMENT_TRACK_ID) {
           destinationTrackId = pattern.id;
         } else {
-          const newTrackPattern = createPattern(false, false);
-          if (!newTrackPattern) return;
+          const newTrackPattern = createPatternLaneCopy(pattern);
           destinationTrackId = newTrackPattern.id;
         }
       }
