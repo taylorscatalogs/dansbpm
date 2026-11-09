@@ -98,11 +98,11 @@
         </div>
 
         <section class="arrangement-workspace" id="arrangement-view" role="tabpanel" aria-labelledby="arrangement-tab">
-          <div class="arrangement-heading">
+          <div class="arrangement-heading" id="arrangement-heading">
             <div class="arrangement-title">
               <h1>Arrangement</h1>
             </div>
-            <div class="arrangement-actions">
+            <div class="arrangement-actions" id="arrangement-actions">
               <button class="quiet-button" id="source-browser-button" type="button">Browser</button>
               <label class="pattern-select-control">
                 <span>PATTERN</span>
@@ -115,13 +115,6 @@
                 <select id="pattern-instrument-select" aria-label="Add an instrument to this pattern"></select>
               </label>
               <button class="quiet-button add-pattern-instrument-button" id="add-pattern-instrument-button" type="button" aria-label="Add instrument to selected pattern">＋</button>
-              <label class="repeater-control">
-                <span>STEP PATTERN</span>
-                <select id="arrangement-pattern-length" aria-label="Step pattern length">
-                  <option value="16">1 BAR</option>
-                  <option value="32">2 BARS</option>
-                </select>
-              </label>
               <button class="quiet-button" id="new-pattern-button" type="button">＋ New pattern</button>
               <button class="quiet-button add-pattern-button" id="add-pattern-button" type="button">Add to song</button>
               <button class="quiet-button record-audio-button" id="record-audio-button" type="button" aria-pressed="false">
@@ -163,7 +156,7 @@
                         <div>
                           <div class="eyebrow">STEP <span class="heading-dot"></span> <span id="bar-label">1 BAR</span></div>
                         </div>
-                        <div class="sequencer-actions">
+                        <div class="sequencer-actions" id="sequencer-actions">
                           <button class="quiet-button workspace-play-button" id="sequencer-workspace-play-button" type="button" aria-label="Play step sequencer workspace" aria-pressed="false">Play</button>
                           <label class="pattern-select-control">
                             <span>PATTERN</span>

@@ -365,20 +365,8 @@
     const label = `${bars} ${bars === 1 ? "BAR" : "BARS"}`;
     $("#bar-label").textContent = label;
     $("#pattern-bars-value").textContent = label;
-    $("#arrangement-pattern-length").value = String(state.steps);
     $("#decrease-pattern-bars").disabled = bars <= 1;
     $("#increase-pattern-bars").disabled = bars >= MAX_PATTERN_BARS;
-  }
-
-  function populatePatternLengthOptions() {
-    const select = $("#arrangement-pattern-length");
-    select.replaceChildren();
-    for (let bars = 1; bars <= MAX_PATTERN_BARS; bars += 1) {
-      const option = document.createElement("option");
-      option.value = String(bars * 16);
-      option.textContent = `${bars} ${bars === 1 ? "BAR" : "BARS"}`;
-      select.append(option);
-    }
   }
 
   function setSequencerGridDimensions(stepCount, slotsPerBar = getStepsPerBar()) {
@@ -1429,7 +1417,6 @@
     });
     renderTracks();
     renderPresets();
-    $("#arrangement-pattern-length").value = String(state.steps);
     updateArrangementLength();
     if (isSongWorkspace()) renderArrangement();
     saveState();
@@ -3593,6 +3580,16 @@
     const showSequencer = view === "sequencer";
     const showPianoRoll = view === "piano-roll";
     const showMixer = view === "mixer";
+    const patternDragSource = $("#pattern-drag-source");
+    const addPatternButton = $("#add-pattern-button");
+    if (showSequencer) {
+      $("#sequencer-actions").append(patternDragSource, addPatternButton);
+    } else {
+      const arrangementActions = $("#arrangement-actions");
+      arrangementActions.insertBefore(patternDragSource, $("#pattern-instrument-select").parentElement);
+      arrangementActions.insertBefore(addPatternButton, $("#record-audio-button"));
+    }
+    $("#arrangement-heading").hidden = showSequencer;
     $("#arrangement-view").hidden = false;
     document.body.classList.toggle("is-beat-grid-open", showSequencer);
     $("#sequencer-view").hidden = !showSequencer;
@@ -5380,7 +5377,6 @@
       event.dataTransfer.effectAllowed = "copy";
     });
     $("#sequencer-browser-button").addEventListener("click", () => $("#source-browser-dialog").showModal());
-    $("#arrangement-pattern-length").addEventListener("change", (event) => setLength(Number(event.target.value)));
     $("#new-pattern-button").addEventListener("click", createPattern);
     $("#new-pattern-sequencer-button").addEventListener("click", createPattern);
     $("#add-pattern-button").addEventListener("click", () => addPatternClip());
@@ -5578,7 +5574,6 @@
     state.patterns = [initialPattern];
     state.selectedPatternId = initialPattern.id;
     initializeProjects();
-    populatePatternLengthOptions();
     restoreState();
     ensureMels();
     tempoValue.textContent = String(state.bpm);

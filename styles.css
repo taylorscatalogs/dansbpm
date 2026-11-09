@@ -516,6 +516,7 @@ body:not(.is-beat-grid-open) #export-button { display: none; }
 
 .arrangement-workspace[hidden] { display: none; }
 .arrangement-heading { display: flex; min-height: 46px; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 2px; }
+.arrangement-heading[hidden] { display: none; }
 .arrangement-title { display: flex; min-width: max-content; align-items: center; gap: 10px; }
 .arrangement-title h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.2px; }
 .arrangement-bar-label { border: 1px solid #34353a; border-radius: 4px; padding: 4px 6px; color: #a7a8ad; font-family: var(--mono); font-size: 8px; }
