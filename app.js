@@ -723,6 +723,15 @@
     });
   }
 
+  function renderStepPianoPreviews() {
+    const pattern = getPattern();
+    if (!pattern) return;
+    trackList.querySelectorAll(".track-row").forEach((row) => {
+      const track = state.tracks.find((item) => item.id === row.dataset.trackId);
+      if (track) renderStepPianoPreview(row, pattern, track);
+    });
+  }
+
   function setArrangementScale(scale) {
     const timeline = $("#timeline-scroll");
     const barOffset = timeline.scrollLeft / BAR_WIDTH;
@@ -7707,6 +7716,7 @@
       state.sequencerScale = Number(event.target.value) / 100;
       $("#sequencer-scale-value").textContent = `${event.target.value}%`;
       setSequencerGridDimensions(getGridStepCount(), getStepsPerBar());
+      renderStepPianoPreviews();
     });
     $("#sequencer-scale-slider").addEventListener("change", saveState);
     $("#arrangement-pattern-select").addEventListener("change", (event) => selectPattern(event.target.value));
