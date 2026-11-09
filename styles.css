@@ -304,25 +304,22 @@ kbd { border: 1px solid #393a3f; border-radius: 3px; padding: 2px 4px; color: #b
 .pattern-clip-name { overflow: hidden; text-overflow: ellipsis; }
 .mel-arrangement-clip { position: absolute; top: 12px; bottom: 12px; display: flex; align-items: center; overflow: hidden; border: 1px solid color-mix(in srgb, var(--clip-color), transparent 38%); border-radius: 5px; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--clip-color), transparent 72%) 0, color-mix(in srgb, var(--clip-color), transparent 72%) 6px, color-mix(in srgb, var(--clip-color), transparent 86%) 6px, color-mix(in srgb, var(--clip-color), transparent 86%) 12px); padding: 0 8px; color: color-mix(in srgb, var(--clip-color), white 48%); font-size: 9px; font-weight: 600; white-space: nowrap; cursor: grab; }
 .mel-arrangement-clip:hover { filter: brightness(1.15); }
-.mel-clip-remove { width: 18px; height: 18px; flex: 0 0 auto; margin-left: auto; border: 0; border-radius: 4px; background: #151619a8; color: #ddd; font-size: 14px; line-height: 1; opacity: 0; cursor: pointer; }
-.mel-arrangement-clip:hover .mel-clip-remove, .mel-clip-remove:focus-visible { opacity: 1; }
+.mel-clip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .mel-drop-label { color: #8d8e94; font-size: 10px; }
 .mel-new-track-lane { display: flex; align-items: center; justify-content: center; border: 1px dashed #383940; background-color: #1b1c1f; color: #777980; font-family: var(--mono); font-size: 9px; letter-spacing: .5px; }
 .mel-new-track-lane.is-drop-target { border-color: #b5a0ff; color: #ddd4ff; }
 .mel-new-track-lane > span { pointer-events: none; }
-.pattern-clip-repeat-handle { width: 9px; height: 28px; flex: 0 0 9px; border: 0; border-right: 2px solid color-mix(in srgb, var(--pattern-color), transparent 30%); background: transparent; padding: 0; opacity: .7; cursor: ew-resize; }
-.pattern-clip-repeat-handle:hover { opacity: 1; }
 .midi-arrangement-clip { position: absolute; top: 12px; bottom: 12px; display: flex; align-items: center; overflow: hidden; border: 1px solid #7565b7; border-radius: 5px; background: repeating-linear-gradient(135deg, #5b4b8b88 0, #5b4b8b88 6px, #362e50 6px, #362e50 12px); padding: 0 8px; color: #ddd4ff; font-family: var(--mono); font-size: 8px; white-space: nowrap; }
-.pattern-clip-remove { width: 17px; height: 17px; flex: 0 0 auto; margin-left: auto; border: 0; border-radius: 3px; background: #151619a8; color: #ddd; font-size: 13px; line-height: 1; opacity: 0; cursor: pointer; }
-.drum-arrangement-clip:hover .pattern-clip-remove, .pattern-clip-remove:focus-visible { opacity: 1; }
+.clip-resize-handle { width: 9px; height: 28px; flex: 0 0 9px; align-self: center; margin-left: auto; border: 0; border-right: 2px solid currentColor; background: transparent; padding: 0; opacity: .65; cursor: ew-resize; touch-action: none; }
+.clip-resize-handle:hover, .clip-resize-handle:focus-visible { opacity: 1; }
 .audio-clip { position: absolute; top: 11px; height: 52px; display: flex; align-items: center; overflow: hidden; border: 1px solid color-mix(in srgb, var(--clip-color), transparent 40%); border-radius: 5px; background: color-mix(in srgb, var(--clip-color), #17181a 83%); padding: 0 7px; color: #e4e4e1; cursor: grab; user-select: none; }
 .audio-clip:hover { filter: brightness(1.16); }
 .audio-clip:active { cursor: grabbing; }
 .clip-waveform { position: absolute; inset: 3px 4px; display: flex; align-items: center; justify-content: space-around; gap: 1px; opacity: .38; pointer-events: none; }
 .clip-waveform i { width: 2px; min-height: 2px; border-radius: 2px; background: var(--clip-color); }
 .clip-name { position: relative; z-index: 1; overflow: hidden; max-width: calc(100% - 24px); text-shadow: 0 1px 5px #000; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; font-weight: 600; }
-.clip-remove { position: relative; z-index: 2; width: 18px; height: 18px; flex: 0 0 auto; margin-left: auto; border: 0; border-radius: 4px; background: #151619a8; color: #ddd; font-size: 14px; line-height: 1; opacity: 0; cursor: pointer; }
-.audio-clip:hover .clip-remove, .clip-remove:focus-visible { opacity: 1; }
+.audio-clip .clip-resize-handle { position: relative; z-index: 2; color: var(--clip-color); }
+.track-view-controls #arrangement-snap-button[aria-pressed="true"] { border-color: #687641; color: var(--accent); }
 .arrangement-cursor { position: absolute; top: 0; bottom: 0; z-index: 5; width: 12px; margin-left: -6px; border: 0; background: transparent; padding: 0; cursor: ew-resize; touch-action: none; }
 .arrangement-cursor::before { position: absolute; top: 0; left: 1px; width: 10px; height: 8px; background: #f3f4e8; clip-path: polygon(0 0, 100% 0, 50% 100%); content: ""; }
 .arrangement-cursor::after { position: absolute; top: 6px; bottom: 0; left: 5px; width: 2px; background: #f3f4e8; box-shadow: 0 0 7px #fff8; content: ""; }
