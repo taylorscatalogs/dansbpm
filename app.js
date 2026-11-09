@@ -276,6 +276,7 @@
   let BAR_WIDTH = BASE_BAR_WIDTH;
   const PIANO_TICK_WIDTH = 16;
   const MAX_ARRANGEMENT_BARS = 256;
+  const DEFAULT_ARRANGEMENT_TRACK_ID = "default-track";
   const TRACK_COLORS = ["#7cc9ff", "#ff9178", "#ee9df6", "#f6ca74", "#93e2bd"];
   const PATTERN_COLORS = ["#d3f36b", "#7cc9ff", "#ff9178", "#ee9df6", "#f6ca74", "#93e2bd", "#b5a0ff", "#f28dba"];
   const GRID_RESOLUTIONS = ["1/32", "1/16", "1/8", "1/4"];
@@ -2784,7 +2785,13 @@
     showToast(`${track.name} removed`);
   }
 
-  function createArrangementTrack(name = "Audio track") {
+  function getNextArrangementTrackName() {
+    let number = 1;
+    while (state.arrangementTracks.some((track) => track.name === `Track ${number}`)) number += 1;
+    return `Track ${number}`;
+  }
+
+  function createArrangementTrack(name = getNextArrangementTrackName()) {
     const track = {
       id: makeId(),
       name,
@@ -3113,7 +3120,10 @@
     const snapButton = $("#arrangement-snap-button");
     snapButton.textContent = `SNAP ${state.arrangementSnap ? "ON" : "OFF"}`;
     snapButton.setAttribute("aria-pressed", String(state.arrangementSnap));
-    $("#arrangement-tab-count").textContent = String(state.arrangementTracks.length + state.melTracks.length + state.patternClips.length);
+    $("#arrangement-tab-count").textContent = String(Math.max(
+      1,
+      state.arrangementTracks.length + state.melTracks.length + state.patternClips.length,
+    ));
     renderPatternSelectors();
     renderInstrumentBrowser();
     renderRecordingBrowser();
@@ -3138,8 +3148,8 @@
     content.append(ruler);
 
     const arrangedPatternIds = new Set(state.patternClips.map((clip) => clip.trackId || clip.patternId));
-    const patternTracks = state.patterns.filter((pattern) =>
-      pattern.id === state.selectedPatternId || arrangedPatternIds.has(pattern.id));
+    const patternTracks = state.patterns.filter((pattern) => arrangedPatternIds.has(pattern.id));
+    const hasTimelineTracks = patternTracks.length > 0 || state.melTracks.length > 0 || state.arrangementTracks.length > 0;
     patternTracks.forEach((pattern) => {
       const label = document.createElement("div");
       label.className = `arrangement-label${state.selectedMixerTrackId === pattern.id ? " is-track-selected" : ""}`;
@@ -3245,16 +3255,27 @@
       content.append(lane);
     });
     const dropLabel = document.createElement("div");
-    dropLabel.className = "arrangement-label new-track-drop-label";
-    dropLabel.textContent = "Drop item for a new track";
-    labels.append(dropLabel);
-    const newTrackLane = createTimelineLane("new-track", width);
-    newTrackLane.classList.add("new-track-drop-lane");
+    const dropLane = createTimelineLane(hasTimelineTracks ? "new-track" : DEFAULT_ARRANGEMENT_TRACK_ID, width);
+    dropLane.classList.add("new-track-drop-lane");
     const dropHint = document.createElement("span");
-    dropHint.textContent = "DROP AN ITEM HERE TO CREATE A TRACK";
-    newTrackLane.append(dropHint);
-    content.append(newTrackLane);
-    $("#arrangement-track-count").textContent = String(patternTracks.length + state.melTracks.length + state.arrangementTracks.length).padStart(2, "0");
+    if (hasTimelineTracks) {
+      dropLabel.className = "arrangement-label new-track-drop-label";
+      dropLabel.textContent = "Drop item for a new track";
+      dropHint.textContent = "DROP AN ITEM HERE TO CREATE A TRACK";
+    } else {
+      dropLabel.className = "arrangement-label default-track-label";
+      dropLabel.dataset.trackId = DEFAULT_ARRANGEMENT_TRACK_ID;
+      dropLabel.style.setProperty("--track-color", TRACK_COLORS[0]);
+      dropLabel.innerHTML = '<span class="track-color"></span><div class="arrangement-label-info"><div class="arrangement-label-name">Track 1</div><div class="arrangement-label-type">Drop an item to start</div></div>';
+      dropLabel.addEventListener("click", () => selectArrangementTrack(DEFAULT_ARRANGEMENT_TRACK_ID));
+      dropHint.textContent = "DROP AN ITEM HERE TO START TRACK 1";
+    }
+    labels.append(dropLabel);
+    dropLane.append(dropHint);
+    content.append(dropLane);
+    $("#arrangement-track-count").textContent = String(hasTimelineTracks
+      ? patternTracks.length + state.melTracks.length + state.arrangementTracks.length
+      : 1).padStart(2, "0");
     updateArrangementCursorMarker();
     updateArrangementSelection();
     if (state.view === "mixer") renderMixer();
@@ -3990,6 +4011,7 @@
     updateArrangementLength();
     renderArrangement();
     saveState();
+    if (destinationTrackId === DEFAULT_ARRANGEMENT_TRACK_ID) selectArrangementTrack(destination.id);
     if (clip.blob) {
       persistClip(destination, clip).catch(() => showToast("Audio was added, but browser storage could not be updated."));
     }
@@ -4198,7 +4220,10 @@
         try {
           const { melId } = JSON.parse(melSource);
           if (trackId.startsWith("mel:")) addMelClip(melId, trackId.slice(4), startBar);
-          else addMelTrack(melId, startBar);
+          else {
+            const melTrack = addMelTrack(melId, startBar);
+            if (trackId === DEFAULT_ARRANGEMENT_TRACK_ID && melTrack) selectArrangementTrack(melTrack.id);
+          }
         } catch {
           showToast("That Mel could not be added.");
         }
@@ -4219,7 +4244,10 @@
       if (patternSource) {
         try {
           const { patternId } = JSON.parse(patternSource);
-          if (isPatternLane) addPatternClip(startBar, patternId, trackId.slice("pattern:".length));
+          if (trackId === DEFAULT_ARRANGEMENT_TRACK_ID) {
+            addPatternClip(startBar, patternId, patternId);
+            selectArrangementTrack(patternId);
+          } else if (isPatternLane) addPatternClip(startBar, patternId, trackId.slice("pattern:".length));
           else addPatternClipToNewTrack(startBar, patternId);
         } catch {
           showToast("That pattern could not be added.");
@@ -5028,9 +5056,13 @@
       const selectedPatternTrack = state.patterns.find((item) => item.id === state.selectedMixerTrackId);
       let destinationTrackId = selectedPatternTrack?.id;
       if (!destinationTrackId) {
-        const newTrackPattern = createPattern(false, false);
-        if (!newTrackPattern) return;
-        destinationTrackId = newTrackPattern.id;
+        if (state.selectedMixerTrackId === DEFAULT_ARRANGEMENT_TRACK_ID) {
+          destinationTrackId = pattern.id;
+        } else {
+          const newTrackPattern = createPattern(false, false);
+          if (!newTrackPattern) return;
+          destinationTrackId = newTrackPattern.id;
+        }
       }
       addPatternClip(state.arrangementCursor, pattern.id, destinationTrackId);
       selectArrangementTrack(destinationTrackId);
