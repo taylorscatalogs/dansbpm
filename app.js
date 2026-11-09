@@ -382,6 +382,7 @@
   let stepPaint = null;
   let stepSelectionDrag = null;
   let stepSelectionAnchor = null;
+  let arrangementMarqueeDeselectPending = false;
   let suppressStepClick = false;
 
   const $ = (selector) => document.querySelector(selector);
@@ -1344,6 +1345,7 @@
 
   function clearMarqueeSelectionOnOutsidePointer(event) {
     if (event.button !== 0 || event.shiftKey || event.altKey) return;
+    if (state.arrangementSelectionFromMarquee) arrangementMarqueeDeselectPending = true;
     const target = event.target;
     const pianoNote = target instanceof Element ? target.closest(".piano-roll-note") : null;
     const clickedSelectedPianoNote = pianoNote &&
@@ -1364,6 +1366,20 @@
       state.selectedArrangementItems.clear();
       state.arrangementSelectionFromMarquee = false;
       updateArrangementSelection();
+    }
+  }
+
+  function finishArrangementMarqueeDeselect(event) {
+    if (!arrangementMarqueeDeselectPending) return;
+    arrangementMarqueeDeselectPending = false;
+    const target = event.target;
+    if (target instanceof Element && target.closest(".clip-resize-handle")) return;
+    state.selectedArrangementItems.clear();
+    state.arrangementSelectionFromMarquee = false;
+    updateArrangementSelection();
+    if (target instanceof Element && target.closest("[data-selectable-type][data-clip-id]")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
     }
   }
 
@@ -4564,6 +4580,7 @@
 
   function selectArrangementItem(type, id, event) {
     const key = arrangementSelectionKey(type, id);
+    if (event.type === "dragstart") arrangementMarqueeDeselectPending = false;
     state.arrangementSelectionFromMarquee = false;
     if (event.shiftKey && (event.ctrlKey || event.metaKey)) {
       state.selectedPianoNoteIds.clear();
@@ -4797,6 +4814,7 @@
     const update = (moveEvent) => {
       if (!moved && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 4) return;
       moved = true;
+      arrangementMarqueeDeselectPending = false;
       moveEvent.preventDefault();
       if (!marquee) {
         marquee = document.createElement("div");
@@ -6779,6 +6797,7 @@
     }, true);
     document.addEventListener("pointerdown", clearStepSelectionOnPointerDown, true);
     document.addEventListener("pointerdown", clearMarqueeSelectionOnOutsidePointer, true);
+    document.addEventListener("click", finishArrangementMarqueeDeselect, true);
     $("#sequencer-pattern-select").addEventListener("change", (event) => selectPattern(event.target.value));
     $("#grid-resolution-select").addEventListener("change", (event) => {
       setPatternGridResolution(event.target.value);
