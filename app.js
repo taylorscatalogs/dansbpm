@@ -2924,15 +2924,15 @@
       content.append(lane);
     });
     const dropLabel = document.createElement("div");
-    dropLabel.className = "arrangement-label mel-drop-label";
-    dropLabel.textContent = "Drop Mel for a new track";
+    dropLabel.className = "arrangement-label new-track-drop-label";
+    dropLabel.textContent = "Drop item for a new track";
     labels.append(dropLabel);
-    const melDropLane = createTimelineLane("new-mel-track", width);
-    melDropLane.classList.add("mel-new-track-lane");
+    const newTrackLane = createTimelineLane("new-track", width);
+    newTrackLane.classList.add("new-track-drop-lane");
     const dropHint = document.createElement("span");
-    dropHint.textContent = "DROP MEL HERE TO CREATE TRACK";
-    melDropLane.append(dropHint);
-    content.append(melDropLane);
+    dropHint.textContent = "DROP AN ITEM HERE TO CREATE A TRACK";
+    newTrackLane.append(dropHint);
+    content.append(newTrackLane);
     $("#arrangement-track-count").textContent = String(patternTracks.length + state.melTracks.length + state.arrangementTracks.length).padStart(2, "0");
     updateArrangementCursorMarker();
     updateArrangementSelection();
@@ -3492,9 +3492,11 @@
       id: makeId(),
       name: mel.name,
       kind: "mel",
-      instrumentId: mel.instrumentId,
+      instrumentId: source.instrumentId,
       gainNode: null,
       fxRuntime: null,
+      analyser: null,
+      sourceGains: null,
       effects: makeDefaultEffects(source.effects),
       clips: [],
     };
@@ -3509,6 +3511,50 @@
     if (!pattern) return;
     clip.startBar = clampArrangementStart(startBar, getArrangementClipDuration("pattern", clip));
     if (state.patterns.some((item) => item.id === trackId)) clip.trackId = trackId;
+    state.patternClips.sort((left, right) => left.startBar - right.startBar);
+    updateArrangementLength();
+    renderArrangement();
+    saveState();
+  }
+
+  function createPatternLaneCopy(source) {
+    captureCurrentPattern();
+    const currentSource = getPattern(source.id) || source;
+    let number = state.patterns.length + 1;
+    while (state.patterns.some((pattern) => pattern.name === `Pattern ${number}`)) number += 1;
+    const pattern = {
+      id: makeId(),
+      name: `Pattern ${number}`,
+      kind: "pattern",
+      color: getPatternColor(state.patterns.length),
+      steps: currentSource.steps,
+      trackIds: [...getPatternTrackIds(currentSource)],
+      cells: Object.fromEntries(Object.entries(currentSource.cells).map(([trackId, cells]) => [trackId, [...cells]])),
+      variants: { ...currentSource.variants },
+      gridResolution: getPatternGridResolution(currentSource),
+      volume: 1,
+      effects: makeDefaultEffects(),
+      effectSettings: makeDefaultEffectSettings(),
+      effectChain: [],
+    };
+    state.patterns.push(pattern);
+    return pattern;
+  }
+
+  function addPatternClipToNewTrack(startBar, patternId) {
+    const source = getPattern(patternId);
+    if (!source) return;
+    const destination = createPatternLaneCopy(source);
+    addPatternClip(startBar, source.id, destination.id);
+  }
+
+  function movePatternClipToNewTrack(clipId, startBar) {
+    const clip = state.patternClips.find((item) => item.id === clipId);
+    const source = clip ? getPattern(clip.patternId) : null;
+    if (!clip || !source) return;
+    const destination = createPatternLaneCopy(source);
+    clip.trackId = destination.id;
+    clip.startBar = clampArrangementStart(startBar, getArrangementClipDuration("pattern", clip));
     state.patternClips.sort((left, right) => left.startBar - right.startBar);
     updateArrangementLength();
     renderArrangement();
@@ -3534,9 +3580,11 @@
       event.preventDefault();
       lane.classList.add("is-drop-target");
       if (event.dataTransfer) {
-        const isPatternSource = Array.from(event.dataTransfer.types || []).includes("application/x-pulsegrid-pattern-source");
-        const isMelSource = Array.from(event.dataTransfer.types || []).includes("application/x-pulsegrid-mel-source");
-        event.dataTransfer.dropEffect = event.dataTransfer.files.length || isPatternSource || isMelSource ? "copy" : "move";
+        const transferTypes = Array.from(event.dataTransfer.types || []);
+        const isCopy = event.dataTransfer.files.length ||
+          transferTypes.includes("application/x-pulsegrid-pattern-source") ||
+          transferTypes.includes("application/x-pulsegrid-mel-source");
+        event.dataTransfer.dropEffect = isCopy ? "copy" : "move";
       }
     });
     lane.addEventListener("dragleave", (event) => {
@@ -3549,7 +3597,8 @@
       const isPatternLane = trackId.startsWith("pattern:");
       const files = Array.from(event.dataTransfer?.files || []);
       if (files.length) {
-        for (const file of files) await importRecording(file, isPatternLane ? null : trackId, startBar);
+        const audioTrackId = state.arrangementTracks.some((track) => track.id === trackId) ? trackId : null;
+        for (const file of files) await importRecording(file, audioTrackId, startBar);
         return;
       }
       const melSource = event.dataTransfer?.getData("application/x-pulsegrid-mel-source");
@@ -3574,35 +3623,40 @@
         }
         return;
       }
-      if (isPatternLane) {
-        const patternTrackId = trackId.slice("pattern:".length);
-        const patternSource = event.dataTransfer?.getData("application/x-pulsegrid-pattern-source");
-        if (patternSource) {
-          try {
-            const { patternId } = JSON.parse(patternSource);
-            addPatternClip(startBar, patternId, patternTrackId);
-          } catch {
-            showToast("That pattern could not be added.");
-          }
-          return;
+      const patternSource = event.dataTransfer?.getData("application/x-pulsegrid-pattern-source");
+      if (patternSource) {
+        try {
+          const { patternId } = JSON.parse(patternSource);
+          if (isPatternLane) addPatternClip(startBar, patternId, trackId.slice("pattern:".length));
+          else addPatternClipToNewTrack(startBar, patternId);
+        } catch {
+          showToast("That pattern could not be added.");
         }
-        const patternTransfer = event.dataTransfer?.getData("application/x-pulsegrid-pattern-clip");
-        if (!patternTransfer) return;
+        return;
+      }
+      const patternTransfer = event.dataTransfer?.getData("application/x-pulsegrid-pattern-clip");
+      if (patternTransfer) {
         try {
           const { clipId } = JSON.parse(patternTransfer);
-          movePatternClip(clipId, startBar, patternTrackId);
+          if (isPatternLane) movePatternClip(clipId, startBar, trackId.slice("pattern:".length));
+          else movePatternClipToNewTrack(clipId, startBar);
         } catch {
           showToast("That drum pattern could not be moved.");
         }
         return;
       }
-      const transfer = event.dataTransfer?.getData("application/x-pulsegrid-audio-clip");
-      if (!transfer) return;
-      try {
-        const { clipId, sourceTrackId } = JSON.parse(transfer);
-        moveArrangementClip(clipId, sourceTrackId, trackId, startBar);
-      } catch {
-        showToast("That audio clip could not be moved.");
+      const audioTransfer = event.dataTransfer?.getData("application/x-pulsegrid-audio-clip");
+      if (audioTransfer) {
+        try {
+          const { clipId, sourceTrackId } = JSON.parse(audioTransfer);
+          if (state.arrangementTracks.some((track) => track.id === trackId)) {
+            moveArrangementClip(clipId, sourceTrackId, trackId, startBar);
+          } else {
+            moveArrangementClipToNewTrack(clipId, sourceTrackId, startBar);
+          }
+        } catch {
+          showToast("That audio clip could not be moved.");
+        }
       }
     });
     const cursor = document.createElement("div");
@@ -4591,6 +4645,26 @@
     saveState();
     persistClip(destination, clip).catch(() => showToast("Clip moved, but browser storage could not be updated."));
     if (source !== destination) persistTrackClips(source);
+  }
+
+  function moveArrangementClipToNewTrack(clipId, sourceTrackId, startBar) {
+    const source = state.arrangementTracks.find((track) => track.id === sourceTrackId);
+    if (!source?.clips.some((clip) => clip.id === clipId)) return;
+    const destination = {
+      ...source,
+      id: makeId(),
+      clips: [],
+      gainNode: null,
+      fxRuntime: null,
+      analyser: null,
+      sourceGains: null,
+      effectChain: [...(source.effectChain || [])],
+      effects: makeDefaultEffects(source.effects),
+      effectSettings: makeDefaultEffectSettings(source.effectSettings),
+    };
+    state.arrangementTracks.push(destination);
+    ensureArrangementTrackAudio(destination);
+    moveArrangementClip(clipId, source.id, destination.id, startBar);
   }
 
   function openRecordingDb() {
@@ -6215,7 +6289,12 @@
       saveState();
     });
     $("#timeline-scroll").addEventListener("scroll", (event) => {
-      $("#arrangement-track-labels").scrollTop = event.currentTarget.scrollTop;
+      const labels = $("#arrangement-track-labels");
+      if (labels.scrollTop !== event.currentTarget.scrollTop) labels.scrollTop = event.currentTarget.scrollTop;
+    });
+    $("#arrangement-track-labels").addEventListener("scroll", (event) => {
+      const timeline = $("#timeline-scroll");
+      if (timeline.scrollTop !== event.currentTarget.scrollTop) timeline.scrollTop = event.currentTarget.scrollTop;
     });
     $("#timeline-content").addEventListener("pointerdown", startArrangementSelection);
     $("#timeline-content").addEventListener("click", (event) => {
