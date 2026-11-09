@@ -1244,6 +1244,26 @@
       .catch((error) => showToast(error.message || "The instrument could not be played."));
   }
 
+  function scaleSelectedPianoNoteDurations(originals, anchorId, requestedDuration, totalTicks) {
+    const anchor = originals.find((original) => original.note.id === anchorId);
+    if (!anchor || originals.length < 2) return false;
+    const snap = state.pianoSnap;
+    const minimumScale = Math.max(...originals.map((original) => snap / original.durationTicks));
+    const maximumScale = Math.min(...originals.map((original) =>
+      (totalTicks - original.startTick) / original.durationTicks));
+    const scale = Math.max(minimumScale, Math.min(maximumScale, requestedDuration / anchor.durationTicks));
+    let changed = false;
+    originals.forEach((original) => {
+      const duration = Math.max(1, Math.min(
+        totalTicks - original.startTick,
+        Math.round(original.durationTicks * scale / snap) * snap,
+      ));
+      changed ||= duration !== original.note.durationTicks;
+      original.note.durationTicks = duration;
+    });
+    return changed;
+  }
+
   function startPianoNoteEdit(event, note, resizing) {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -1260,7 +1280,7 @@
     }
     if (!state.selectedPianoNoteIds.has(note.id)) selectPianoNote(note.id);
     state.selectedPianoNoteId = note.id;
-    const editNotes = !resizing && state.selectedPianoNoteIds.size > 1
+    const editNotes = state.selectedPianoNoteIds.size > 1
       ? state.pianoNotes.filter((item) => state.selectedPianoNoteIds.has(item.id))
       : [note];
     const originals = editNotes.map((item) => ({
@@ -1279,7 +1299,17 @@
       moved ||= Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) >= 4;
       const delta = Math.round((moveEvent.clientX - startX) / getPianoTickWidth() / state.pianoSnap) * state.pianoSnap;
       if (resizing) {
-        note.durationTicks = Math.max(1, Math.min(totalTicks - note.startTick, Math.round((durationTicks + delta) / state.pianoSnap) * state.pianoSnap));
+        if (originals.length > 1) {
+          scaleSelectedPianoNoteDurations(
+            originals,
+            note.id,
+            Math.max(state.pianoSnap, Math.round((durationTicks + delta) / state.pianoSnap) * state.pianoSnap),
+            totalTicks,
+          );
+        } else {
+          note.durationTicks = Math.max(1, Math.min(totalTicks - note.startTick,
+            Math.round((durationTicks + delta) / state.pianoSnap) * state.pianoSnap));
+        }
       } else {
         const minStart = Math.min(...originals.map((item) => item.startTick));
         const maxEnd = Math.max(...originals.map((item) => item.startTick + item.durationTicks));
@@ -1372,11 +1402,23 @@
     const totalTicks = state.pianoBars * PIANO_TICKS_PER_BAR;
     if (resize) {
       const delta = horizontal * state.pianoSnap;
-      const minimum = Math.max(...selected.map((note) => state.pianoSnap - note.durationTicks));
-      const maximum = Math.min(...selected.map((note) => totalTicks - note.startTick - note.durationTicks));
-      const boundedDelta = Math.max(minimum, Math.min(maximum, delta));
-      if (!boundedDelta || Math.sign(boundedDelta) !== Math.sign(delta)) return false;
-      selected.forEach((note) => { note.durationTicks += boundedDelta; });
+      if (selected.length > 1) {
+        const anchor = selected.find((note) => note.id === state.selectedPianoNoteId) || selected.at(-1);
+        const originals = selected.map((note) => ({
+          note,
+          startTick: note.startTick,
+          durationTicks: note.durationTicks,
+        }));
+        const requestedDuration = Math.max(state.pianoSnap,
+          Math.round((anchor.durationTicks + delta) / state.pianoSnap) * state.pianoSnap);
+        if (!scaleSelectedPianoNoteDurations(originals, anchor.id, requestedDuration, totalTicks)) return false;
+      } else {
+        const minimum = Math.max(...selected.map((note) => state.pianoSnap - note.durationTicks));
+        const maximum = Math.min(...selected.map((note) => totalTicks - note.startTick - note.durationTicks));
+        const boundedDelta = Math.max(minimum, Math.min(maximum, delta));
+        if (!boundedDelta || Math.sign(boundedDelta) !== Math.sign(delta)) return false;
+        selected.forEach((note) => { note.durationTicks += boundedDelta; });
+      }
     } else {
       const minStart = Math.min(...selected.map((note) => note.startTick));
       const maxEnd = Math.max(...selected.map((note) => note.startTick + note.durationTicks));
