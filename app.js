@@ -380,6 +380,8 @@
     },
   };
   let stepPaint = null;
+  let stepSelectionDrag = null;
+  let stepSelectionAnchor = null;
   let suppressStepClick = false;
 
   const $ = (selector) => document.querySelector(selector);
@@ -551,6 +553,56 @@
       event.preventDefault();
       setStepCellValue(track, step, cell, stepPaint.value);
     }
+  }
+
+  function updateStepSelectionDrag(event) {
+    const drag = stepSelectionDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
+    drag.moved = true;
+    if (!drag.marquee) {
+      drag.marquee = document.createElement("div");
+      drag.marquee.className = "selection-marquee";
+      drag.marquee.style.position = "fixed";
+      document.body.append(drag.marquee);
+    }
+    const left = Math.min(drag.startX, event.clientX);
+    const top = Math.min(drag.startY, event.clientY);
+    const right = Math.max(drag.startX, event.clientX);
+    const bottom = Math.max(drag.startY, event.clientY);
+    Object.assign(drag.marquee.style, {
+      left: `${left}px`,
+      top: `${top}px`,
+      width: `${right - left}px`,
+      height: `${bottom - top}px`,
+    });
+    const selection = new Set(drag.initialSelection);
+    document.querySelectorAll(".step-cell").forEach((cell) => {
+      const bounds = cell.getBoundingClientRect();
+      if (bounds.left <= right && bounds.right >= left && bounds.top <= bottom && bounds.bottom >= top) {
+        const trackId = cell.closest(".track-row")?.dataset.trackId;
+        if (trackId) selection.add(`${trackId}:${cell.dataset.step}`);
+      }
+    });
+    state.selectedStepCells = selection;
+    document.querySelectorAll(".step-cell").forEach((cell) => {
+      const key = `${cell.closest(".track-row")?.dataset.trackId}:${cell.dataset.step}`;
+      cell.classList.toggle("is-selected", state.selectedStepCells.has(key));
+    });
+  }
+
+  function finishStepSelectionDrag(event) {
+    const drag = stepSelectionDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    updateStepSelectionDrag(event);
+    if (!drag.moved) state.selectedStepCells.add(`${drag.trackId}:${drag.step}`);
+    drag.marquee?.remove();
+    stepSelectionDrag = null;
+    document.querySelectorAll(".step-cell").forEach((cell) => {
+      const key = `${cell.closest(".track-row")?.dataset.trackId}:${cell.dataset.step}`;
+      cell.classList.toggle("is-selected", state.selectedStepCells.has(key));
+    });
+    window.setTimeout(() => { suppressStepClick = false; }, 0);
   }
 
   function finishStepPaint(event) {
@@ -1674,13 +1726,42 @@
         cell.setAttribute("aria-pressed", String(track.cells[step]));
         if (state.currentStep === step) cell.classList.add("is-playhead");
         cell.addEventListener("pointerdown", (event) => {
-          if (event.button !== 0 || event.pointerType !== "mouse" || event.shiftKey) return;
+          if (event.button !== 0) return;
+          stepSelectionAnchor = { trackId: track.id, step };
+          if (event.shiftKey) {
+            event.preventDefault();
+            state.selectedArrangementItems.clear();
+            state.arrangementSelectionFromMarquee = false;
+            state.selectedPianoNoteIds.clear();
+            state.selectedPianoNoteId = null;
+            state.pianoSelectionFromMarquee = false;
+            updateArrangementSelection();
+            document.querySelectorAll(".piano-roll-note").forEach((item) => item.classList.remove("is-selected"));
+            stepSelectionDrag = {
+              pointerId: event.pointerId,
+              trackId: track.id,
+              step,
+              startX: event.clientX,
+              startY: event.clientY,
+              initialSelection: new Set(state.selectedStepCells),
+              moved: false,
+              marquee: null,
+            };
+            suppressStepClick = true;
+            return;
+          }
+          if (event.pointerType !== "mouse") return;
           stepPaint = { pointerId: event.pointerId, value: !track.cells[step], changed: false };
           suppressStepClick = true;
           setStepCellValue(track, step, cell, stepPaint.value);
         });
         cell.addEventListener("click", (event) => {
           const cellKey = `${track.id}:${step}`;
+          if (suppressStepClick) {
+            suppressStepClick = false;
+            return;
+          }
+          stepSelectionAnchor = { trackId: track.id, step };
           if (event.shiftKey) {
             state.selectedArrangementItems.clear();
             state.arrangementSelectionFromMarquee = false;
@@ -1691,10 +1772,6 @@
             document.querySelectorAll(".piano-roll-note").forEach((item) => item.classList.remove("is-selected"));
             state.selectedStepCells.add(cellKey);
             cell.classList.add("is-selected");
-            return;
-          }
-          if (suppressStepClick) {
-            suppressStepClick = false;
             return;
           }
           state.selectedStepCells.delete(cellKey);
@@ -4270,12 +4347,44 @@
     state.selectedStepCells = new Set(state.tracks
       .filter((track) => patternTrackIds.has(track.id))
       .flatMap((track) => Array.from({ length: stepCount }, (_, step) => `${track.id}:${step}`)));
+    const firstTrack = state.tracks.find((track) => patternTrackIds.has(track.id));
+    stepSelectionAnchor = firstTrack ? { trackId: firstTrack.id, step: 0 } : null;
     document.querySelectorAll(".step-cell").forEach((cell) => {
       cell.classList.toggle("is-selected", state.selectedStepCells.has(`${cell.closest(".track-row").dataset.trackId}:${cell.dataset.step}`));
     });
   }
 
   function copyEditorSelection() {
+    if (state.view === "sequencer") {
+      if (!state.selectedStepCells.size) return;
+      const tracks = Array.from(document.querySelectorAll(".track-row"), (row) =>
+        state.tracks.find((track) => track.id === row.dataset.trackId)).filter(Boolean);
+      const trackIndexes = new Map(tracks.map((track, index) => [track.id, index]));
+      const selection = [...state.selectedStepCells].map((key) => {
+        const separator = key.lastIndexOf(":");
+        return { trackId: key.slice(0, separator), step: Number(key.slice(separator + 1)) };
+      });
+      const firstSelection = selection.find(({ trackId }) => trackIndexes.has(trackId));
+      const anchor = stepSelectionAnchor && trackIndexes.has(stepSelectionAnchor.trackId)
+        ? stepSelectionAnchor
+        : firstSelection;
+      if (!anchor) return;
+      const anchorTrackIndex = trackIndexes.get(anchor.trackId);
+      const items = selection.flatMap(({ trackId, step }) => {
+        const trackIndex = trackIndexes.get(trackId);
+        const track = trackIndex === undefined ? null : tracks[trackIndex];
+        if (!track || !Number.isInteger(step)) return [];
+        return [{
+          trackOffset: trackIndex - anchorTrackIndex,
+          stepOffset: step - anchor.step,
+          value: track.cells[step] === true,
+        }];
+      });
+      if (!items.length) return;
+      stepSelectionAnchor = { ...anchor };
+      state.clipboard = { type: "sequencer", items, pasteCount: 0 };
+      return;
+    }
     if (state.view === "piano-roll") {
       const selectedIds = new Set(state.selectedPianoNoteIds);
       if (state.selectedPianoNoteId) selectedIds.add(state.selectedPianoNoteId);
@@ -4323,7 +4432,9 @@
   }
 
   function pasteEditorClipboard() {
-    const expectedType = state.view === "piano-roll" ? "piano-roll" : ["arrangement", "mixer"].includes(state.view) ? "arrangement" : null;
+    const expectedType = state.view === "sequencer" ? "sequencer" :
+      state.view === "piano-roll" ? "piano-roll" :
+        ["arrangement", "mixer"].includes(state.view) ? "arrangement" : null;
     if (!state.clipboard) {
       showToast("Copy selected items before pasting.");
       return;
@@ -4358,6 +4469,37 @@
       renderPianoRoll();
       updateArrangementLength();
       renderArrangement();
+      saveState();
+      return;
+    }
+    if (expectedType === "sequencer") {
+      const tracks = Array.from(document.querySelectorAll(".track-row"), (row) =>
+        state.tracks.find((track) => track.id === row.dataset.trackId)).filter(Boolean);
+      const targetTrackIndex = stepSelectionAnchor
+        ? tracks.findIndex((track) => track.id === stepSelectionAnchor.trackId)
+        : -1;
+      const stepCount = getGridStepCount();
+      if (targetTrackIndex < 0 || stepCount < 1) {
+        showToast("Select a step in the current Step Grid before pasting.");
+        return;
+      }
+      const targetStep = Math.max(0, Math.min(stepCount - 1, stepSelectionAnchor.step));
+      const pasted = new Set();
+      clipboard.items.forEach((item) => {
+        const track = tracks[targetTrackIndex + item.trackOffset];
+        const step = targetStep + item.stepOffset;
+        if (!track || step < 0 || step >= stepCount) return;
+        track.cells[step] = item.value;
+        pasted.add(`${track.id}:${step}`);
+      });
+      if (!pasted.size) {
+        showToast("There is no room to paste those steps at the selected position.");
+        return;
+      }
+      stepSelectionAnchor = { trackId: tracks[targetTrackIndex].id, step: targetStep };
+      state.selectedStepCells = pasted;
+      captureCurrentPattern();
+      renderTracks();
       saveState();
       return;
     }
@@ -6453,8 +6595,11 @@
 
   function bindEvents() {
     document.addEventListener("pointermove", paintStepAtPointer);
+    document.addEventListener("pointermove", updateStepSelectionDrag);
     document.addEventListener("pointerup", finishStepPaint);
+    document.addEventListener("pointerup", finishStepSelectionDrag);
     document.addEventListener("pointercancel", finishStepPaint);
+    document.addEventListener("pointercancel", finishStepSelectionDrag);
     playButton.addEventListener("click", () => {
       if (state.keyboardRecordingCountdown) cancelKeyboardRecordingCountdown();
       if (state.isPlaying && state.playbackMode === "arrangement") stopPlayback();
@@ -6802,10 +6947,10 @@
           if (state.view === "arrangement" || state.view === "mixer") selectAllArrangementItems();
           else if (state.view === "sequencer") selectAllStepCells();
           else selectAllPianoNotes();
-        } else if (key === "c" && ["arrangement", "piano-roll", "mixer"].includes(state.view)) {
+        } else if (key === "c" && ["arrangement", "sequencer", "piano-roll", "mixer"].includes(state.view)) {
           event.preventDefault();
           copyEditorSelection();
-        } else if (key === "v" && ["arrangement", "piano-roll", "mixer"].includes(state.view)) {
+        } else if (key === "v" && ["arrangement", "sequencer", "piano-roll", "mixer"].includes(state.view)) {
           event.preventDefault();
           pasteEditorClipboard();
         } else if (key === "x" && ["arrangement", "piano-roll", "mixer"].includes(state.view)) {
