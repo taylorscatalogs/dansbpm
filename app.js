@@ -3331,18 +3331,27 @@
     document.addEventListener("pointercancel", finish);
   }
 
-  function makeArrangementResizeHandle(type, clip, track, element, labelElement) {
+  function makeArrangementResizeHandle(type, clip, track, element, labelElement, mode = "length") {
     const handle = document.createElement("button");
     const name = type === "pattern" ? getPattern(clip.patternId)?.name || "pattern"
       : type === "mel" ? getMel(clip.melId)?.name || "Mel" : clip.name;
     handle.type = "button";
-    handle.className = "clip-resize-handle";
-    handle.setAttribute("aria-label", `Resize ${name}`);
-    handle.title = "Drag to trim or extend; extension after the source is silent";
+    handle.className = `clip-resize-handle clip-${mode}-handle`;
+    handle.setAttribute("aria-label", mode === "repeat" ? `Repeat ${name}` : `Resize ${name}`);
+    handle.title = mode === "repeat"
+      ? "Drag to repeat the pattern"
+      : "Drag to trim or extend; extension after the source is silent";
 
     const updateDuration = (durationBars) => {
       if (type === "audio") clip.durationSeconds = durationBars * (240 / state.bpm);
       else clip.durationBars = durationBars;
+      if (mode === "repeat" && type === "pattern") {
+        const pattern = getPattern(clip.patternId);
+        if (pattern) {
+          const patternBars = pattern.steps / 16;
+          clip.repeatCount = Math.max(1, Math.ceil(((clip.sourceOffsetBars || 0) + durationBars - 0.0001) / patternBars));
+        }
+      }
       const duration = getArrangementClipDuration(type, clip);
       element.style.width = `${Math.max(28, duration * BAR_WIDTH - 8)}px`;
       if (type === "mel") {
@@ -3509,13 +3518,14 @@
     element.draggable = true;
     element.style.left = `${clip.startBar * BAR_WIDTH + 4}px`;
     element.style.width = `${Math.max(28, totalBars * BAR_WIDTH - 8)}px`;
-    element.setAttribute("aria-label", `${patternName}, bar ${clip.startBar + 1}, ${displayBars} bars; drag to move or resize`);
+    element.setAttribute("aria-label", `${patternName}, bar ${clip.startBar + 1}, ${displayBars} bars; drag to move, repeat, or resize`);
     const icon = document.createElement("span");
     icon.className = "pattern-clip-icon";
     icon.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 11h3l2-6 4 10 2-6h3" /></svg>';
     const text = document.createElement("span");
     text.className = "pattern-clip-name";
     text.textContent = `${patternName.toUpperCase()} · ${displayBars} BAR${displayBars === 1 ? "" : "S"}`;
+    const repeatHandle = makeArrangementResizeHandle("pattern", clip, null, element, text, "repeat");
     const resizeHandle = makeArrangementResizeHandle("pattern", clip, null, element, text);
     element.addEventListener("dragstart", (event) => {
       if (!(event.shiftKey && (event.ctrlKey || event.metaKey))) selectArrangementItem("pattern", clip.id, event);
@@ -3528,7 +3538,7 @@
       if (!selectArrangementItem("pattern", clip.id, event)) return;
       setArrangementCursor(clip.startBar);
     });
-    element.append(icon, text, resizeHandle);
+    element.append(icon, text, repeatHandle, resizeHandle);
     return element;
   }
 
