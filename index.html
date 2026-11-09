@@ -401,18 +401,14 @@
           <span>dans<span class="brand-light">bpm</span></span>
         </a>
         <div class="eyebrow">LOCAL PROFILES</div>
-        <div class="login-options">
-          <button class="login-option" id="login-taylor-button" type="button">
-            <span class="login-avatar">T</span>
-            <span><strong>Taylor</strong><small>Open Taylor’s projects</small></span>
-            <span class="login-arrow" aria-hidden="true">→</span>
-          </button>
-          <button class="login-option" id="login-guest-button" type="button">
-            <span class="login-avatar guest-avatar">G</span>
-            <span><strong>Guest</strong><small>Open Guest projects</small></span>
-            <span class="login-arrow" aria-hidden="true">→</span>
-          </button>
-        </div>
+        <div class="login-options" id="login-options" aria-label="Choose a profile"></div>
+        <form class="create-profile-form" id="create-profile-form">
+          <label for="new-profile-name">Create a new profile</label>
+          <div class="create-profile-controls">
+            <input id="new-profile-name" name="profileName" type="text" maxlength="32" autocomplete="name" placeholder="Your name" required />
+            <button class="quiet-button" type="submit">Create</button>
+          </div>
+        </form>
         <p class="login-error" id="login-error" role="alert"></p>
         <p class="login-note">Profiles are local to this browser and are not password-protected.</p>
       </div>

@@ -269,9 +269,13 @@
   const STORAGE_KEY = "pulsegrid-session-v1";
   const PROJECTS_KEY = `${STORAGE_KEY}-projects`;
   const PROJECT_STORAGE_PREFIX = `${STORAGE_KEY}-project-`;
+  const USERS_KEY = `${STORAGE_KEY}-users`;
   const ACTIVE_USER_KEY = `${STORAGE_KEY}-active-user`;
   const OPEN_PROJECTS_KEY = `${STORAGE_KEY}-open-projects`;
-  const PROJECT_USERS = ["taylor", "guest"];
+  const DEFAULT_USERS = [
+    { id: "taylor", name: "Taylor" },
+    { id: "guest", name: "Guest" },
+  ];
   const MAX_PATTERN_BARS = 32;
   const MAX_PATTERN_STEPS = MAX_PATTERN_BARS * 16;
   const STEP_COUNT = MAX_PATTERN_BARS * 32;
@@ -333,6 +337,7 @@
     projectId: "default",
     projectName: "Untitled session",
     projects: [],
+    users: [],
     currentUser: null,
     activeProjectIds: {},
     suppressArrangementClick: false,
@@ -6165,16 +6170,72 @@
     return state.projects.filter((project) => project.ownerId === state.currentUser);
   }
 
+  function getCurrentUserName() {
+    return state.users.find((user) => user.id === state.currentUser)?.name || "";
+  }
+
+  function saveUsers() {
+    window.localStorage.setItem(USERS_KEY, JSON.stringify(state.users));
+  }
+
+  function renderLoginUsers() {
+    const options = $("#login-options");
+    options.replaceChildren();
+    state.users.forEach((user) => {
+      const button = document.createElement("button");
+      button.className = "login-option";
+      button.type = "button";
+      button.dataset.userId = user.id;
+      const avatar = document.createElement("span");
+      avatar.className = `login-avatar${user.id === "guest" ? " guest-avatar" : ""}`;
+      avatar.textContent = user.name.trim().charAt(0).toUpperCase();
+      const text = document.createElement("span");
+      const name = document.createElement("strong");
+      name.textContent = user.name;
+      const detail = document.createElement("small");
+      detail.textContent = `Open ${user.name}'s projects`;
+      text.append(name, detail);
+      const arrow = document.createElement("span");
+      arrow.className = "login-arrow";
+      arrow.setAttribute("aria-hidden", "true");
+      arrow.textContent = "→";
+      button.append(avatar, text, arrow);
+      options.append(button);
+    });
+  }
+
+  function initializeUsers() {
+    let users = DEFAULT_USERS.map((user) => ({ ...user }));
+    try {
+      const savedUsers = JSON.parse(window.localStorage.getItem(USERS_KEY) || "null");
+      if (Array.isArray(savedUsers)) {
+        users = savedUsers.filter((user) =>
+          typeof user?.id === "string" && user.id && typeof user.name === "string" && user.name.trim())
+          .map((user) => ({ id: user.id, name: user.name.trim().slice(0, 32) }));
+      }
+      DEFAULT_USERS.forEach((defaultUser) => {
+        if (!users.some((user) => user.id === defaultUser.id)) users.push(defaultUser);
+      });
+      state.users = users;
+      saveUsers();
+    } catch (error) {
+      if (!state.users.length) state.users = users;
+      showToast(`Could not load or save profiles: ${error.message || "browser storage is unavailable"}`);
+    }
+    renderLoginUsers();
+  }
+
   function getSessionUser() {
     try {
       const userId = window.sessionStorage.getItem(ACTIVE_USER_KEY);
-      return PROJECT_USERS.includes(userId) ? userId : null;
+      return state.users.some((user) => user.id === userId) ? userId : null;
     } catch {
       return null;
     }
   }
 
   function selectUser(userId) {
+    if (!state.users.some((user) => user.id === userId)) return;
     try {
       window.sessionStorage.setItem(ACTIVE_USER_KEY, userId);
       window.sessionStorage.setItem(OPEN_PROJECTS_KEY, "true");
@@ -6182,6 +6243,33 @@
     } catch (error) {
       try { window.sessionStorage.removeItem(ACTIVE_USER_KEY); } catch { /* Session storage may be unavailable. */ }
       $("#login-error").textContent = `Could not start this profile: ${error.message || "session storage is unavailable"}`;
+    }
+  }
+
+  function createUser() {
+    const input = $("#new-profile-name");
+    const name = input.value.trim().slice(0, 32);
+    const error = $("#login-error");
+    error.textContent = "";
+    if (!name) {
+      error.textContent = "Enter a name for your profile.";
+      input.focus();
+      return;
+    }
+    if (state.users.some((user) => user.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      error.textContent = "A profile with that name already exists in this browser.";
+      input.focus();
+      return;
+    }
+    const user = { id: makeId(), name };
+    state.users.push(user);
+    try {
+      saveUsers();
+      renderLoginUsers();
+      selectUser(user.id);
+    } catch (saveError) {
+      state.users = state.users.filter((item) => item.id !== user.id);
+      error.textContent = `Could not save this profile: ${saveError.message || "browser storage is unavailable"}`;
     }
   }
 
@@ -6208,7 +6296,7 @@
         : [];
       projects = projects.map((project) => ({
         ...project,
-        ownerId: PROJECT_USERS.includes(project.ownerId) ? project.ownerId : "taylor",
+        ownerId: state.users.some((user) => user.id === project.ownerId) ? project.ownerId : "taylor",
       }));
       state.activeProjectIds = savedCatalog?.activeProjectIds && typeof savedCatalog.activeProjectIds === "object"
         ? { ...savedCatalog.activeProjectIds }
@@ -7313,8 +7401,14 @@
     $("#rename-project-button").addEventListener("click", renameProject);
     $("#new-project-button").addEventListener("click", createProject);
     $("#switch-user-button").addEventListener("click", switchUser);
-    $("#login-taylor-button").addEventListener("click", () => selectUser("taylor"));
-    $("#login-guest-button").addEventListener("click", () => selectUser("guest"));
+    $("#login-options").addEventListener("click", (event) => {
+      const option = event.target instanceof Element ? event.target.closest("[data-user-id]") : null;
+      if (option instanceof HTMLButtonElement) selectUser(option.dataset.userId);
+    });
+    $("#create-profile-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      createUser();
+    });
     sampleInput.addEventListener("change", () => loadSample(sampleInput.files?.[0]));
     $("#import-drum-sounds-button").addEventListener("click", () => drumSamplesInput.click());
     drumSamplesInput.addEventListener("change", () => importDrumSamples(Array.from(drumSamplesInput.files || [])));
@@ -7464,6 +7558,7 @@
   }
 
   function initialize() {
+    initializeUsers();
     state.currentUser = getSessionUser();
     state.tracks = makeTracks();
     const initialPattern = makePatternSnapshot(makeId(), "Pattern 1");
@@ -7486,7 +7581,7 @@
     setWorkspaceView(state.view, true);
     bindEvents();
     $("#login-screen").hidden = Boolean(state.currentUser);
-    $("#active-user-label").textContent = state.currentUser === "taylor" ? "Taylor" : "Guest";
+    $("#active-user-label").textContent = getCurrentUserName();
   }
 
   initialize();
