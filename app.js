@@ -542,6 +542,17 @@
     if (stepPaint) stepPaint.changed = true;
   }
 
+  function clearStepCellSelection() {
+    if (!state.selectedStepCells.size) return;
+    state.selectedStepCells.clear();
+    document.querySelectorAll(".step-cell.is-selected").forEach((cell) => cell.classList.remove("is-selected"));
+  }
+
+  function clearStepSelectionOnPointerDown(event) {
+    if (state.view !== "sequencer" || event.shiftKey) return;
+    clearStepCellSelection();
+  }
+
   function paintStepAtPointer(event) {
     if (!stepPaint || event.pointerId !== stepPaint.pointerId) return;
     const target = document.elementFromPoint(event.clientX, event.clientY);
@@ -1774,8 +1785,7 @@
             cell.classList.add("is-selected");
             return;
           }
-          state.selectedStepCells.delete(cellKey);
-          cell.classList.remove("is-selected");
+          clearStepCellSelection();
           setStepCellValue(track, step, cell, !track.cells[step]);
           saveState();
         });
@@ -6767,6 +6777,7 @@
       event.preventDefault();
       event.stopPropagation();
     }, true);
+    document.addEventListener("pointerdown", clearStepSelectionOnPointerDown, true);
     document.addEventListener("pointerdown", clearMarqueeSelectionOnOutsidePointer, true);
     $("#sequencer-pattern-select").addEventListener("change", (event) => selectPattern(event.target.value));
     $("#grid-resolution-select").addEventListener("change", (event) => {
