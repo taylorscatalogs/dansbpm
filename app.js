@@ -230,6 +230,8 @@
     selectedStepCells: new Set(),
     selectedMixerTrackId: null,
     selectedMixerEffectId: null,
+    mixerEffectAnimation: null,
+    mixerEffectDialogTrackId: null,
     clipboard: null,
     projectId: "default",
     projectName: "Untitled session",
@@ -321,10 +323,27 @@
     ["vocoder", "Vocoder"], ["transientShaper", "Transient shaper"], ["autopan", "Auto-pan"],
     ["phaser", "Phaser"],
   ];
+  const EFFECT_PARAMETERS = {
+    reverb: [["decay", "Decay", 0.2, 6, 0.1, " s", 1.8], ["preDelay", "Pre-delay", 0, 100, 1, " ms", 20]],
+    delay: [["time", "Time", 0.05, 1, 0.01, " s", 0.28], ["feedback", "Feedback", 0, 90, 1, "%", 42]],
+    chorus: [["rate", "Rate", 0.05, 5, 0.05, " Hz", 0.28], ["depth", "Depth", 1, 30, 1, " ms", 12]],
+    distortion: [["drive", "Drive", 1, 20, 0.5, "×", 8]],
+    compressor: [["threshold", "Threshold", -60, 0, 1, " dB", -18], ["ratio", "Ratio", 1, 20, 0.5, ":1", 4], ["attack", "Attack", 1, 100, 1, " ms", 3], ["release", "Release", 10, 1000, 10, " ms", 180]],
+    tremolo: [["rate", "Rate", 0.1, 12, 0.1, " Hz", 5], ["depth", "Depth", 0, 100, 1, "%", 45]],
+    bitcrusher: [["bits", "Bit depth", 2, 16, 1, " bit", 8]],
+    pitchShifter: [["semitones", "Pitch", -12, 12, 1, " st", 0]],
+    harmonizer: [["interval", "Interval", 1, 12, 1, " st", 7]],
+    noiseGate: [["threshold", "Threshold", -70, 0, 1, " dB", -42], ["release", "Release", 10, 500, 10, " ms", 180]],
+    vocoder: [["carrier", "Carrier", 55, 440, 1, " Hz", 110]],
+    transientShaper: [["attack", "Attack", -12, 12, 1, " dB", 3], ["sustain", "Sustain", -12, 12, 1, " dB", -2]],
+    autopan: [["rate", "Rate", 0.05, 8, 0.05, " Hz", 0.35], ["depth", "Depth", 0, 100, 1, "%", 100]],
+    phaser: [["rate", "Rate", 0.05, 5, 0.05, " Hz", 0.18], ["depth", "Depth", 100, 3000, 50, " Hz", 900]],
+  };
+  const EFFECT_IDS = new Set(EFFECT_NAMES.map(([id]) => id));
 
   function makeDefaultEffects(effects) {
     const defaults = {
-      eqLow: 0, eqMid: 0, eqHigh: 0,
+      eqSub: 0, eqLow: 0, eqMid: 0, eqHigh: 0, eqAir: 0,
       ...Object.fromEntries(EFFECT_NAMES.map(([id]) => [id, 0])),
     };
     if (!effects || typeof effects !== "object") return defaults;
@@ -333,6 +352,27 @@
     });
     EFFECT_NAMES.forEach(([id]) => { defaults[id] = Math.max(0, Math.min(100, defaults[id])); });
     return defaults;
+  }
+
+  function makeDefaultEffectSettings(settings) {
+    return Object.fromEntries(Object.entries(EFFECT_PARAMETERS).map(([effectId, parameters]) => [
+      effectId,
+      Object.fromEntries(parameters.map(([id, , min, max, , , defaultValue]) => {
+        const savedValue = settings?.[effectId]?.[id];
+        return [id, Number.isFinite(savedValue) ? Math.max(min, Math.min(max, savedValue)) : defaultValue];
+      })),
+    ]));
+  }
+
+  function ensureTrackMixerState(track) {
+    track.volume = Number.isFinite(track.volume) ? Math.max(0, Math.min(1, track.volume)) : 1;
+    track.effects = makeDefaultEffects(track.effects);
+    track.effectSettings = makeDefaultEffectSettings(track.effectSettings);
+    const activeEffects = Array.isArray(track.effectChain)
+      ? track.effectChain.filter((id) => EFFECT_IDS.has(id))
+      : EFFECT_NAMES.filter(([id]) => track.effects[id] > 0).map(([id]) => id);
+    track.effectChain = [...new Set(activeEffects)];
+    return track.effectChain;
   }
 
   function getPattern(patternId = state.selectedPatternId) {
@@ -497,12 +537,17 @@
     return {
       id,
       name,
+      kind: "pattern",
       color,
       steps: state.steps,
       trackIds: state.tracks.filter((track) => !track.libraryOnly && track.kind !== "drumkit").map((track) => track.id),
       cells,
       variants,
       gridResolution: "1/16",
+      volume: 1,
+      effects: makeDefaultEffects(),
+      effectSettings: makeDefaultEffectSettings(),
+      effectChain: [],
     };
   }
 
@@ -1372,12 +1417,17 @@
     const pattern = {
       id: makeId(),
       name: `Pattern ${number}`,
+      kind: "pattern",
       color: getPatternColor(state.patterns.length),
       steps: source.steps,
       trackIds: [...getPatternTrackIds(source)],
       cells: Object.fromEntries(Object.entries(source.cells).map(([trackId, cells]) => [trackId, [...cells]])),
       variants: { ...source.variants },
       gridResolution: getPatternGridResolution(source),
+      volume: 1,
+      effects: makeDefaultEffects(),
+      effectSettings: makeDefaultEffectSettings(),
+      effectChain: [],
     };
     state.patterns.push(pattern);
     if (selectCreated) {
@@ -1942,6 +1992,7 @@
     }
     state.arrangementTracks.forEach(ensureArrangementTrackAudio);
     state.melTracks.forEach(ensureTrackAudio);
+    state.patterns.forEach(ensureTrackAudio);
     return state.audioContext;
   }
 
@@ -1979,7 +2030,20 @@
     return time + (isSwingStep ? getStepDuration() * swingDelta / 100 : 0);
   }
 
-  function scheduleStep(step, time, pattern = null, loopIndex = null, updatePlayhead = true, highlightPlayer = null) {
+  function getPatternSourceGain(patternTrack, sourceTrack) {
+    ensureTrackAudio(patternTrack);
+    patternTrack.sourceGains ||= new Map();
+    let gain = patternTrack.sourceGains.get(sourceTrack.id);
+    if (!gain) {
+      gain = state.audioContext.createGain();
+      gain.connect(patternTrack.gainNode);
+      patternTrack.sourceGains.set(sourceTrack.id, gain);
+    }
+    gain.gain.setTargetAtTime(sourceTrack.volume, state.audioContext.currentTime, 0.015);
+    return gain;
+  }
+
+  function scheduleStep(step, time, pattern = null, loopIndex = null, updatePlayhead = true, highlightPlayer = null, outputTrack = null) {
     const activeTracks = pattern
       ? state.tracks.filter((track) => getPatternTrackIds(pattern).includes(track.id))
       : state.tracks;
@@ -1992,7 +2056,8 @@
           state.liveRecordedHits.delete(`${pattern.id}:${loopIndex}:${track.id}:${step}`)) return;
         const gridPattern = pattern || getPattern();
         const trackTime = getTrackStepTime(track, step, gridPattern, time);
-        triggerTrack(track, trackTime, step, variant, getNoteDuration(gridPattern));
+        const outputNode = outputTrack && outputTrack !== track ? getPatternSourceGain(outputTrack, track) : null;
+        triggerTrack(track, trackTime, step, variant, getNoteDuration(gridPattern), outputTrack || track, outputNode);
       }
     });
     if (!updatePlayhead && !highlightPlayer) return;
@@ -2081,7 +2146,8 @@
         if (time < now || time >= now + lookAhead || time >= state.playbackEndTime) continue;
         const key = `${clip.id}:${sourceStep}`;
         if (state.scheduledArrangementSteps.has(key)) continue;
-        scheduleStep(patternStep, time, pattern);
+        const patternTrack = state.patterns.find((item) => item.id === (clip.trackId || clip.patternId)) || null;
+        scheduleStep(patternStep, time, pattern, null, false, null, patternTrack);
         state.scheduledArrangementSteps.add(key);
       }
     });
@@ -2426,8 +2492,8 @@
   }
 
   function ensureTrackAudio(track) {
+    ensureTrackMixerState(track);
     if (!state.audioContext) return;
-    track.effects = makeDefaultEffects(track.effects);
     if (track.kind === "mel") {
       const instrument = state.tracks.find((item) => item.id === track.instrumentId);
       if (instrument && instrument !== track) ensureTrackAudio(instrument);
@@ -2443,14 +2509,19 @@
     const context = state.audioContext;
     if (!context || !track.gainNode || !state.masterGain) return;
     clearTrackEffectNodes(track);
+    track.analyser?.disconnect();
+    track.analyser = null;
+    ensureTrackMixerState(track);
     track.fxRuntime = [];
     track.gainNode.disconnect();
     let output = track.gainNode;
 
     const eq = [
-      ["lowshelf", 120, track.effects.eqLow],
+      ["lowshelf", 40, track.effects.eqSub],
+      ["peaking", 160, track.effects.eqLow],
       ["peaking", 1000, track.effects.eqMid],
-      ["highshelf", 8000, track.effects.eqHigh],
+      ["peaking", 5000, track.effects.eqHigh],
+      ["highshelf", 12000, track.effects.eqAir],
     ].map(([type, frequency, gain]) => {
       const filter = context.createBiquadFilter();
       filter.type = type;
@@ -2462,10 +2533,16 @@
     });
     track.fxRuntime.push({ nodes: eq, sources: [] });
 
-    EFFECT_NAMES.forEach(([id]) => {
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 2048;
+    output.connect(analyser);
+    output = analyser;
+    track.analyser = analyser;
+    track.fxRuntime.push({ nodes: [analyser], sources: [] });
+
+    track.effectChain.forEach((id) => {
       const amount = track.effects[id];
-      if (amount <= 0) return;
-      const module = createTrackEffect(context, id, amount);
+      const module = createTrackEffect(context, id, amount, track.effectSettings[id]);
       output.connect(module.input);
       output = module.output;
       track.fxRuntime.push(module);
@@ -2490,7 +2567,7 @@
     track.gainNode = null;
   }
 
-  function createTrackEffect(context, id, amount) {
+  function createTrackEffect(context, id, amount, settings = {}) {
     const input = context.createGain();
     const output = context.createGain();
     const dry = context.createGain();
@@ -2498,6 +2575,7 @@
     const nodes = [input, output, dry, wet];
     const sources = [];
     const mix = amount / 100;
+    const setting = (key, fallback) => Number.isFinite(settings[key]) ? settings[key] : fallback;
     dry.gain.value = 1 - mix * 0.65;
     wet.gain.value = mix * 0.65;
     input.connect(dry);
@@ -2511,7 +2589,8 @@
 
     if (id === "reverb") {
       const convolver = context.createConvolver();
-      const impulse = context.createBuffer(2, context.sampleRate * 1.8, context.sampleRate);
+      const decay = setting("decay", 1.8);
+      const impulse = context.createBuffer(2, Math.floor(context.sampleRate * decay), context.sampleRate);
       for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
         const samples = impulse.getChannelData(channel);
         for (let index = 0; index < samples.length; index += 1) {
@@ -2519,12 +2598,17 @@
         }
       }
       convolver.buffer = impulse;
-      connectWet(convolver);
+      const preDelay = context.createDelay(0.11);
+      preDelay.delayTime.value = setting("preDelay", 20) / 1000;
+      input.connect(preDelay);
+      preDelay.connect(convolver);
+      nodes.push(preDelay, convolver);
+      effectOutput = convolver;
     } else if (id === "delay") {
       const delay = context.createDelay(1);
-      delay.delayTime.value = 0.28;
+      delay.delayTime.value = setting("time", 0.28);
       const feedback = context.createGain();
-      feedback.gain.value = 0.42;
+      feedback.gain.value = setting("feedback", 42) / 100;
       delay.connect(feedback);
       feedback.connect(delay);
       nodes.push(feedback);
@@ -2533,9 +2617,10 @@
       const delay = context.createDelay(0.5);
       const modulation = context.createOscillator();
       const depth = context.createGain();
-      delay.delayTime.value = id === "chorus" ? 0.025 : 0.08;
-      modulation.frequency.value = id === "chorus" ? 0.28 : id === "harmonizer" ? 0.7 : 0.45;
-      depth.gain.value = id === "chorus" ? 0.012 : 0.035 * mix;
+      const interval = id === "pitchShifter" ? Math.abs(setting("semitones", 0)) : setting("interval", 7);
+      delay.delayTime.value = id === "chorus" ? setting("depth", 12) / 1000 : 0.035 + interval * 0.006;
+      modulation.frequency.value = id === "chorus" ? setting("rate", 0.28) : id === "harmonizer" ? 0.7 : 0.45;
+      depth.gain.value = id === "chorus" ? setting("depth", 12) / 1000 : 0.035 * mix;
       modulation.connect(depth);
       depth.connect(delay.delayTime);
       modulation.start();
@@ -2545,30 +2630,36 @@
     } else if (id === "distortion" || id === "bitcrusher") {
       const shaper = context.createWaveShaper();
       const curve = new Float32Array(4096);
+      const drive = setting("drive", 8);
+      const levels = Math.pow(2, setting("bits", 8));
       for (let index = 0; index < curve.length; index += 1) {
         const sample = index * 2 / (curve.length - 1) - 1;
         curve[index] = id === "bitcrusher"
-          ? Math.round(sample * (8 + mix * 56)) / (8 + mix * 56)
-          : Math.tanh(sample * (1 + mix * 18));
+          ? Math.round(sample * levels) / levels
+          : Math.tanh(sample * drive);
       }
       shaper.curve = curve;
       shaper.oversample = "4x";
       connectWet(shaper);
     } else if (id === "compressor" || id === "noiseGate" || id === "transientShaper") {
       const compressor = context.createDynamicsCompressor();
-      compressor.threshold.value = id === "noiseGate" ? -42 : id === "transientShaper" ? -22 : -18;
+      compressor.threshold.value = id === "noiseGate" ? setting("threshold", -42)
+        : id === "transientShaper" ? -18 - setting("attack", 3)
+          : setting("threshold", -18);
       compressor.knee.value = id === "noiseGate" ? 0 : 12;
-      compressor.ratio.value = id === "noiseGate" ? 20 : id === "transientShaper" ? 5 : 4;
-      compressor.attack.value = 0.003;
-      compressor.release.value = id === "transientShaper" ? 0.08 : 0.18;
+      compressor.ratio.value = id === "noiseGate" ? 20
+        : id === "transientShaper" ? Math.max(1, 5 + setting("sustain", -2) / 3)
+          : setting("ratio", 4);
+      compressor.attack.value = id === "transientShaper" ? 0.003 : setting("attack", 3) / 1000;
+      compressor.release.value = id === "transientShaper" ? 0.08 : setting("release", 180) / 1000;
       connectWet(compressor);
     } else if (id === "tremolo") {
       const tremolo = context.createGain();
       tremolo.gain.value = 0.55;
       const oscillator = context.createOscillator();
       const depth = context.createGain();
-      oscillator.frequency.value = 5;
-      depth.gain.value = 0.45 * mix;
+      oscillator.frequency.value = setting("rate", 5);
+      depth.gain.value = setting("depth", 45) / 100 * mix;
       oscillator.connect(depth);
       depth.connect(tremolo.gain);
       oscillator.start();
@@ -2579,8 +2670,8 @@
       const panner = context.createStereoPanner();
       const oscillator = context.createOscillator();
       const depth = context.createGain();
-      oscillator.frequency.value = 0.35;
-      depth.gain.value = mix;
+      oscillator.frequency.value = setting("rate", 0.35);
+      depth.gain.value = setting("depth", 100) / 100 * mix;
       oscillator.connect(depth);
       depth.connect(panner.pan);
       oscillator.start();
@@ -2599,8 +2690,8 @@
       });
       const oscillator = context.createOscillator();
       const depth = context.createGain();
-      oscillator.frequency.value = 0.18;
-      depth.gain.value = 900 * mix;
+      oscillator.frequency.value = setting("rate", 0.18);
+      depth.gain.value = setting("depth", 900) * mix;
       oscillator.connect(depth);
       filters.forEach((filter) => depth.connect(filter.frequency));
       oscillator.start();
@@ -2612,7 +2703,7 @@
       const carrier = context.createOscillator();
       const ring = context.createGain();
       carrier.type = "sawtooth";
-      carrier.frequency.value = 110;
+      carrier.frequency.value = setting("carrier", 110);
       carrier.connect(ring.gain);
       carrier.start();
       sources.push(carrier);
@@ -2688,6 +2779,11 @@
     state.selectedMixerTrackId = trackId;
     document.querySelectorAll(".arrangement-label[data-track-id]").forEach((label) => {
       label.classList.toggle("is-track-selected", label.dataset.trackId === trackId);
+    });
+    document.querySelectorAll(".mixer-track-row").forEach((row) => {
+      const selected = row.dataset.trackId === trackId;
+      row.classList.toggle("is-selected", selected);
+      row.querySelector(".mixer-track-title")?.setAttribute("aria-pressed", String(selected));
     });
   }
 
@@ -2844,54 +2940,42 @@
   }
 
   function getMixerTracks() {
-    const activePatternIds = new Set([
+    const patternTrackIds = new Set([
       state.selectedPatternId,
-      ...state.patternClips.map((clip) => clip.patternId),
+      ...state.patternClips.map((clip) => clip.trackId || clip.patternId),
     ]);
-    const activeTrackIds = new Set();
-    state.patterns.forEach((pattern) => {
-      if (!activePatternIds.has(pattern.id)) return;
-      getPatternTrackIds(pattern).forEach((trackId) => {
-        if (pattern.cells?.[trackId]?.some(Boolean)) activeTrackIds.add(trackId);
-      });
-    });
-    state.pianoNotes.forEach((note) => activeTrackIds.add(note.trackId || state.selectedPianoTrackId));
-    state.mels.forEach((mel) => {
-      if (mel.notes.length) activeTrackIds.add(mel.instrumentId);
-    });
     return [
-      ...state.tracks.filter((track) => activeTrackIds.has(track.id))
-        .map((track) => ({ track, type: "Step / instrument" })),
-      ...state.melTracks.filter((track) => track.clips.length)
-        .map((track) => ({ track, type: "Mel" })),
-      ...state.arrangementTracks.filter((track) => track.clips.length)
-        .map((track) => ({ track, type: "Audio" })),
+      ...state.patterns.filter((track) => patternTrackIds.has(track.id))
+        .map((track) => ({ track, type: "Pattern" })),
+      ...state.melTracks.map((track) => ({ track, type: "Mel" })),
+      ...state.arrangementTracks.map((track) => ({ track, type: "Audio" })),
     ];
   }
 
   function renderMixer() {
     const root = $("#mixer-content");
     const channels = getMixerTracks();
-    if (!channels.some(({ track }) => track.id === state.selectedMixerTrackId)) {
-      state.selectedMixerTrackId = channels[0]?.track.id || null;
-    }
     root.replaceChildren();
+    channels.forEach(({ track }) => ensureTrackMixerState(track));
     if (!channels.length) {
       const empty = document.createElement("p");
       empty.className = "mixer-empty";
-      empty.textContent = "No tracks with content yet. Add steps, notes, or clips to see them here.";
+      empty.textContent = "No tracks in Track View yet. Add a pattern, Mel, or recording to get started.";
       root.append(empty);
       return;
     }
+    if (!channels.some(({ track }) => track.id === state.selectedMixerTrackId)) {
+      state.selectedMixerTrackId = channels[0].track.id;
+    }
 
-    const channelList = document.createElement("div");
-    channelList.className = "mixer-channel-list";
-    channels.forEach(({ track, type }) => {
-      const strip = document.createElement("div");
-      strip.className = `mixer-channel${track.id === state.selectedMixerTrackId ? " is-selected" : ""}`;
-      strip.dataset.trackId = track.id;
+    const trackList = document.createElement("div");
+    trackList.className = "mixer-track-list";
+    channels.forEach(({ track }) => {
+      const row = document.createElement("section");
+      row.className = `mixer-track-row${track.id === state.selectedMixerTrackId ? " is-selected" : ""}`;
+      row.dataset.trackId = track.id;
       const title = document.createElement("button");
-      title.className = "mixer-channel-title";
+      title.className = "mixer-track-title";
       title.type = "button";
       title.textContent = track.name;
       title.setAttribute("aria-pressed", String(track.id === state.selectedMixerTrackId));
@@ -2899,83 +2983,116 @@
         selectArrangementTrack(track.id);
         renderMixer();
       });
-      const heading = document.createElement("div");
-      heading.className = "mixer-channel-heading";
-      heading.append(title);
-      if (track.id === state.selectedMixerTrackId) {
-        const selectedLabel = document.createElement("span");
-        selectedLabel.className = "mixer-channel-selected";
-        selectedLabel.textContent = "SELECTED";
-        heading.append(selectedLabel);
-      }
-      const kind = document.createElement("span");
-      kind.className = "mixer-channel-type";
-      kind.textContent = type;
-      const effects = makeMixerEffectSlots(track);
-      strip.append(heading, kind, effects);
-      channelList.append(strip);
+      row.append(title, makeMixerVolumeKnob(track));
+      const effectTarget = document.createElement("div");
+      effectTarget.className = "mixer-track-effects";
+      effectTarget.setAttribute("aria-label", `${track.name} effects; drop effects here`);
+      effectTarget.addEventListener("dragover", (event) => {
+        if (!Array.from(event.dataTransfer?.types || []).includes("application/x-dansbpm-effect")) return;
+        event.preventDefault();
+        effectTarget.classList.add("is-drop-target");
+      });
+      effectTarget.addEventListener("dragleave", (event) => {
+        if (!effectTarget.contains(event.relatedTarget)) effectTarget.classList.remove("is-drop-target");
+      });
+      effectTarget.addEventListener("drop", (event) => {
+        event.preventDefault();
+        effectTarget.classList.remove("is-drop-target");
+        const effectId = event.dataTransfer?.getData("application/x-dansbpm-effect");
+        if (effectId) addMixerEffect(track, effectId);
+      });
+      effectTarget.append(makeMixerEffectSlots(track));
+      row.append(effectTarget);
+      trackList.append(row);
     });
 
-    const selected = channels.find(({ track }) => track.id === state.selectedMixerTrackId)?.track;
-    const editor = document.createElement("section");
-    editor.className = "mixer-track-editor";
-    const header = document.createElement("div");
-    header.className = "mixer-track-header";
-    const title = document.createElement("h2");
-    title.textContent = selected.name;
-    const volumeLabel = document.createElement("label");
-    volumeLabel.className = "mixer-volume-control";
-    const volumeText = document.createElement("span");
-    volumeText.textContent = "VOLUME";
-    const volume = document.createElement("input");
-    volume.type = "range";
-    volume.min = "0";
-    volume.max = "100";
-    volume.value = String(Math.round(selected.volume * 100));
-    volume.setAttribute("aria-label", `${selected.name} volume`);
-    const volumeValue = document.createElement("output");
-    volumeValue.textContent = `${Math.round(selected.volume * 100)}%`;
-    volume.addEventListener("input", () => {
-      selected.volume = Number(volume.value) / 100;
-      volumeValue.textContent = `${volume.value}%`;
-      updateTrackGains();
-      saveState();
+    const library = document.createElement("aside");
+    library.className = "mixer-effects-library";
+    const libraryTitle = document.createElement("h2");
+    libraryTitle.textContent = "Available effects";
+    const libraryHint = document.createElement("p");
+    libraryHint.textContent = "Drag an effect onto a track";
+    const effectList = document.createElement("div");
+    effectList.className = "mixer-effects-library-list";
+    EFFECT_NAMES.forEach(([id, name]) => {
+      const effect = document.createElement("button");
+      effect.className = "mixer-library-effect";
+      effect.type = "button";
+      effect.draggable = true;
+      effect.textContent = name;
+      effect.dataset.effectId = id;
+      effect.addEventListener("dragstart", (event) => {
+        event.dataTransfer?.setData("application/x-dansbpm-effect", id);
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy";
+      });
+      effect.addEventListener("click", () => {
+        const track = channels.find(({ track: item }) => item.id === state.selectedMixerTrackId)?.track || channels[0].track;
+        addMixerEffect(track, id, true);
+      });
+      effectList.append(effect);
     });
-    volumeLabel.append(volumeText, volume, volumeValue);
-    header.append(title, volumeLabel);
-    editor.append(header);
-    const eqGroup = document.createElement("div");
-    eqGroup.className = "mixer-control-group";
-    const eqHeading = document.createElement("h3");
-    eqHeading.textContent = "3-band EQ";
-    eqGroup.append(eqHeading);
-    [
-      ["eqLow", "Low", "120 Hz"],
-      ["eqMid", "Mid", "1 kHz"],
-      ["eqHigh", "High", "8 kHz"],
-    ].forEach(([id, label, frequency]) => {
-      const control = makeMixerRange(selected, id, label, -12, 12, 1, " dB");
-      control.querySelector(".mixer-control-caption").append(` · ${frequency}`);
-      eqGroup.append(control);
-    });
-    editor.append(eqGroup);
-    const effectsGroup = document.createElement("div");
-    effectsGroup.className = "mixer-control-group mixer-effects-group";
-    const effectsHeading = document.createElement("h3");
-    effectsHeading.textContent = "Effects";
-    effectsGroup.append(effectsHeading);
-    EFFECT_NAMES.forEach(([id, label]) => effectsGroup.append(makeMixerRange(selected, id, label, 0, 100, 1, "%")));
-    editor.append(effectsGroup);
-    root.append(channelList, editor);
+    library.append(libraryTitle, libraryHint, effectList);
+    root.append(trackList, library);
   }
 
-  function selectMixerEffect(trackId, effectId) {
-    selectArrangementTrack(trackId);
-    state.selectedMixerEffectId = effectId;
-    renderMixer();
-    const control = document.querySelector(`[data-effect-id="${effectId}"] input`);
-    control?.focus({ preventScroll: true });
-    control?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  function makeMixerVolumeKnob(track) {
+    const wrapper = document.createElement("label");
+    wrapper.className = "mixer-track-volume";
+    const caption = document.createElement("span");
+    caption.textContent = "VOL";
+    const knob = document.createElement("div");
+    knob.className = "mixer-volume-knob";
+    knob.setAttribute("role", "slider");
+    knob.tabIndex = 0;
+    knob.setAttribute("aria-label", `${track.name} volume`);
+    knob.setAttribute("aria-valuemin", "0");
+    knob.setAttribute("aria-valuemax", "100");
+    const pointer = document.createElement("span");
+    pointer.className = "mixer-volume-knob-pointer";
+    knob.append(pointer);
+    const value = document.createElement("output");
+    value.textContent = `${Math.round(track.volume * 100)}%`;
+    const setValue = (next, persist = false) => {
+      const percent = Math.max(0, Math.min(100, Math.round(next)));
+      track.volume = percent / 100;
+      knob.setAttribute("aria-valuenow", String(percent));
+      knob.setAttribute("aria-valuetext", `${percent}%`);
+      knob.style.setProperty("--knob-angle", `${-135 + percent * 2.7}deg`);
+      knob.style.setProperty("--knob-fill", `${percent * 0.75}%`);
+      value.textContent = `${percent}%`;
+      updateTrackGains();
+      if (persist) saveState();
+    };
+    const setFromPointer = (event) => {
+      const bounds = knob.getBoundingClientRect();
+      const angle = Math.atan2(event.clientY - bounds.top - bounds.height / 2, event.clientX - bounds.left - bounds.width / 2) * 180 / Math.PI;
+      setValue(((angle - 135 + 360) % 360) / 270 * 100);
+    };
+    knob.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      knob.setPointerCapture(event.pointerId);
+      setFromPointer(event);
+      const onMove = (moveEvent) => setFromPointer(moveEvent);
+      const onEnd = () => {
+        knob.removeEventListener("pointermove", onMove);
+        knob.removeEventListener("pointerup", onEnd);
+        knob.removeEventListener("pointercancel", onEnd);
+        saveState();
+      };
+      knob.addEventListener("pointermove", onMove);
+      knob.addEventListener("pointerup", onEnd);
+      knob.addEventListener("pointercancel", onEnd);
+    });
+    knob.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowUp"].includes(event.key)) return;
+      event.preventDefault();
+      const direction = ["ArrowRight", "ArrowUp"].includes(event.key) ? 1 : -1;
+      setValue(track.volume * 100 + direction * (event.shiftKey ? 5 : 1), true);
+    });
+    setValue(track.volume * 100);
+    wrapper.append(caption, knob, value);
+    return wrapper;
   }
 
   function makeMixerRange(track, id, label, min, max, step, unit) {
@@ -3013,32 +3130,219 @@
     const effects = document.createElement("div");
     effects.className = "mixer-effect-slots";
     effects.setAttribute("aria-label", `${track.name} active effects`);
-    const eqLevel = ["eqLow", "eqMid", "eqHigh"].some((id) => track.effects?.[id] !== 0);
-    if (eqLevel) {
-      const eqButton = document.createElement("button");
-      eqButton.className = "mixer-effect-slot";
-      eqButton.type = "button";
-      eqButton.textContent = "EQ";
-      eqButton.title = `Open EQ levels for ${track.name}`;
-      eqButton.addEventListener("click", () => selectMixerEffect(track.id, "eqLow"));
-      effects.append(eqButton);
-    }
-    EFFECT_NAMES.filter(([id]) => track.effects?.[id] > 0).forEach(([id, name]) => {
+    const addSlot = (id, name) => {
       const effectButton = document.createElement("button");
       effectButton.className = "mixer-effect-slot";
       effectButton.type = "button";
-      effectButton.textContent = `${name} ${Math.round(track.effects[id])}%`;
-      effectButton.title = `Open ${name} level for ${track.name}`;
-      effectButton.addEventListener("click", () => selectMixerEffect(track.id, id));
+      effectButton.textContent = id === "eq" ? name : `${name} ${Math.round(track.effects[id])}%`;
+      effectButton.title = `Open ${name} settings for ${track.name}`;
+      effectButton.addEventListener("click", () => openMixerEffectDialog(track, id));
       effects.append(effectButton);
-    });
-    if (!effects.childElementCount) {
-      const emptyEffects = document.createElement("span");
-      emptyEffects.className = "mixer-no-effects";
-      emptyEffects.textContent = "No effects";
-      effects.append(emptyEffects);
-    }
+    };
+    addSlot("eq", "EQ");
+    track.effectChain.forEach((id) => addSlot(id, EFFECT_NAMES.find(([effectId]) => effectId === id)?.[1] || id));
+    if (track.effectChain.length === 0) effects.classList.add("is-empty");
     return effects;
+  }
+
+  function addMixerEffect(track, effectId, openEditor = false) {
+    if (!EFFECT_IDS.has(effectId)) return;
+    ensureTrackMixerState(track);
+    if (!track.effectChain.includes(effectId)) {
+      track.effectChain.push(effectId);
+      if (track.effects[effectId] === 0) track.effects[effectId] = 35;
+      if (state.audioContext) {
+        ensureTrackAudio(track);
+        rebuildTrackEffectChain(track);
+      }
+      saveState();
+      renderMixer();
+    }
+    selectArrangementTrack(track.id);
+    if (openEditor) openMixerEffectDialog(track, effectId);
+  }
+
+  function removeMixerEffect(track, effectId) {
+    track.effectChain = track.effectChain.filter((id) => id !== effectId);
+    track.effects[effectId] = 0;
+    if (state.audioContext) rebuildTrackEffectChain(track);
+    saveState();
+    $("#mixer-effect-dialog").close();
+    renderMixer();
+  }
+
+  function refreshMixerEffectTrack(track) {
+    ensureTrackMixerState(track);
+    if (state.audioContext) {
+      ensureTrackAudio(track);
+      rebuildTrackEffectChain(track);
+    }
+    saveState();
+  }
+
+  function makeMixerSettingRange(labelText, value, min, max, step, unit, onInput) {
+    const control = document.createElement("label");
+    control.className = "mixer-effect-control";
+    const caption = document.createElement("span");
+    caption.className = "mixer-control-caption";
+    caption.textContent = labelText;
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(step);
+    input.value = String(value);
+    const output = document.createElement("output");
+    output.textContent = `${input.value}${unit}`;
+    input.addEventListener("input", () => {
+      output.textContent = `${input.value}${unit}`;
+      onInput(Number(input.value));
+    });
+    control.append(caption, input, output);
+    return control;
+  }
+
+  function openMixerEffectDialog(track, effectId) {
+    ensureTrackMixerState(track);
+    if (state.audioContext) ensureTrackAudio(track);
+    const dialog = $("#mixer-effect-dialog");
+    if (state.mixerEffectAnimation !== null) cancelAnimationFrame(state.mixerEffectAnimation);
+    state.mixerEffectAnimation = null;
+    if (dialog.open) dialog.close();
+    state.mixerEffectDialogTrackId = track.id;
+    $("#mixer-effect-track-name").textContent = track.name;
+    const title = effectId === "eq" ? "EQ" : EFFECT_NAMES.find(([id]) => id === effectId)?.[1] || effectId;
+    $("#mixer-effect-title").textContent = title;
+    const content = $("#mixer-effect-dialog-content");
+    content.replaceChildren();
+    let eqCanvas = null;
+    let eqBands = [];
+
+    if (effectId === "eq") {
+      const visualizer = document.createElement("div");
+      visualizer.className = "mixer-eq-visualizer";
+      const canvas = document.createElement("canvas");
+      canvas.setAttribute("aria-label", `${track.name} live EQ spectrum`);
+      eqCanvas = canvas;
+      visualizer.append(canvas);
+      content.append(visualizer);
+      eqBands = [
+        ["eqSub", "Sub · 20–60 Hz", 40],
+        ["eqLow", "Bass · 60–250 Hz", 160],
+        ["eqMid", "Mid · 250 Hz–2 kHz", 1000],
+        ["eqHigh", "Presence · 2–8 kHz", 5000],
+        ["eqAir", "Air · 8–20 kHz", 12000],
+      ];
+      const controls = document.createElement("div");
+      controls.className = "mixer-effect-controls";
+      eqBands.forEach(([id, label]) => {
+        controls.append(makeMixerSettingRange(label, track.effects[id], -12, 12, 1, " dB", (value) => {
+          track.effects[id] = value;
+          refreshMixerEffectTrack(track);
+        }));
+      });
+      content.append(controls);
+    } else {
+      const controls = document.createElement("div");
+      controls.className = "mixer-effect-controls";
+      controls.append(makeMixerSettingRange("Mix", track.effects[effectId], 0, 100, 1, "%", (value) => {
+        track.effects[effectId] = value;
+        refreshMixerEffectTrack(track);
+      }));
+      (EFFECT_PARAMETERS[effectId] || []).forEach(([id, label, min, max, step, unit]) => {
+        controls.append(makeMixerSettingRange(label, track.effectSettings[effectId][id], min, max, step, unit, (value) => {
+          track.effectSettings[effectId][id] = value;
+          refreshMixerEffectTrack(track);
+        }));
+      });
+      content.append(controls);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "quiet-button mixer-remove-effect";
+      remove.textContent = "Remove effect";
+      remove.addEventListener("click", () => removeMixerEffect(track, effectId));
+      content.append(remove);
+    }
+    dialog.showModal();
+    if (eqCanvas) drawMixerEq(track, eqCanvas, eqBands.map(([id, , frequency]) => [id, frequency]));
+  }
+
+  function drawMixerEq(track, canvas, bands) {
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const draw = () => {
+      if (!canvas.isConnected || !$("#mixer-effect-dialog").open || state.mixerEffectDialogTrackId !== track.id) return;
+      const bounds = canvas.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) {
+        state.mixerEffectAnimation = requestAnimationFrame(draw);
+        return;
+      }
+      const ratio = window.devicePixelRatio || 1;
+      const canvasWidth = Math.round(bounds.width * ratio);
+      const canvasHeight = Math.round(bounds.height * ratio);
+      if (canvas.width !== canvasWidth || canvas.height !== canvasHeight) {
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+      }
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const width = bounds.width;
+      const height = bounds.height;
+      const centerY = height / 2;
+      context.fillStyle = "#141518";
+      context.fillRect(0, 0, width, height);
+      context.strokeStyle = "#34363b";
+      context.lineWidth = 1;
+      [0.2, 0.5, 0.8].forEach((ratioY) => {
+        const y = height * ratioY;
+        context.beginPath();
+        context.moveTo(0, y);
+        context.lineTo(width, y);
+        context.stroke();
+      });
+      const frequencies = [20, 100, 1000, 10000, 20000];
+      frequencies.forEach((frequency) => {
+        const x = Math.log(frequency / 20) / Math.log(1000) * width;
+        context.beginPath();
+        context.moveTo(x, 0);
+        context.lineTo(x, height);
+        context.stroke();
+        context.fillStyle = "#85868c";
+        context.font = "9px sans-serif";
+        context.fillText(frequency >= 1000 ? `${frequency / 1000}k` : String(frequency), x + 3, height - 5);
+      });
+      if (track.analyser && state.isPlaying) {
+        const data = new Uint8Array(track.analyser.frequencyBinCount);
+        track.analyser.getByteFrequencyData(data);
+        const sampleRate = state.audioContext?.sampleRate || 44100;
+        context.fillStyle = "rgba(124, 201, 255, .3)";
+        for (let index = 1; index < data.length; index += 1) {
+          const frequency = index * sampleRate / track.analyser.fftSize;
+          if (frequency < 20 || frequency > 20000) continue;
+          const x = Math.log(frequency / 20) / Math.log(1000) * width;
+          const barWidth = Math.max(1, width / 180);
+          const barHeight = (data[index] / 255) * height * 0.8;
+          context.fillRect(x, height - barHeight, barWidth, barHeight);
+        }
+      }
+      const response = (frequency) => bands.reduce((sum, [id, center]) => {
+        const gain = track.effects[id];
+        const octaves = Math.log2(frequency / center);
+        return sum + gain * Math.exp(-(octaves * octaves) / 1.8);
+      }, 0);
+      context.strokeStyle = "#d4f16c";
+      context.lineWidth = 2;
+      context.beginPath();
+      for (let x = 0; x <= width; x += 2) {
+        const frequency = 20 * Math.pow(1000, x / width);
+        const gain = Math.max(-12, Math.min(12, response(frequency)));
+        const y = centerY - gain / 24 * height;
+        if (x === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      }
+      context.stroke();
+      state.mixerEffectAnimation = requestAnimationFrame(draw);
+    };
+    draw();
   }
 
   function renderInstrumentBrowser() {
@@ -4476,23 +4780,23 @@
 
   function updateTrackGains() {
     if (!state.audioContext) return;
-    const allTracks = [...state.tracks, ...state.arrangementTracks, ...state.melTracks];
+    const allTracks = [...state.tracks, ...state.arrangementTracks, ...state.melTracks, ...state.patterns];
     const hasSolo = [...state.tracks, ...state.arrangementTracks].some((track) => track.solo);
     const hasMelSolo = state.melTracks.some((track) => track.solo);
     allTracks.forEach((track) => {
       if (!track.gainNode) return;
-      const isSilent = track.muted || (track.kind === "mel"
+      const isSilent = track.muted || (track.kind === "pattern" ? false : track.kind === "mel"
         ? hasMelSolo && !track.solo
         : hasSolo && !track.solo);
       track.gainNode.gain.setTargetAtTime(isSilent ? 0 : track.volume, state.audioContext.currentTime, 0.015);
     });
   }
 
-  function triggerTrack(track, time, step, variant = track.variant, noteDuration = getStepDuration(), outputTrack = track) {
+  function triggerTrack(track, time, step, variant = track.variant, noteDuration = getStepDuration(), outputTrack = track, outputNode = null) {
     const context = state.audioContext;
     const pitchRatio = Math.pow(2, (track.pitch || 0) / 12);
     ensureTrackAudio(outputTrack);
-    const output = outputTrack.gainNode;
+    const output = outputNode || outputTrack.gainNode;
     if (track.sample) {
       const source = context.createBufferSource();
       source.buffer = track.sample.buffer;
@@ -4516,8 +4820,8 @@
       case "hat": playHat(context, output, time, false, variant, durationScale, pitchRatio); break;
       case "openhat": playHat(context, output, time, true, variant, durationScale, pitchRatio); break;
       case "rim": playRim(context, output, time, variant, durationScale, pitchRatio); break;
-      case "drumkit": playDrumKitNote(track, time, 36, noteDuration, 0.8, outputTrack); break;
-      case "instrument": playInstrumentVoice(track, time, 60 + (track.pitch || 0), noteDuration, 0.8, outputTrack); break;
+      case "drumkit": playDrumKitNote(track, time, 36, noteDuration, 0.8, outputTrack, output); break;
+      case "instrument": playInstrumentVoice(track, time, 60 + (track.pitch || 0), noteDuration, 0.8, outputTrack, output); break;
       default: break;
     }
   }
@@ -4555,7 +4859,7 @@
     triggerTrack(track, time, midi, track.variant, duration, outputTrack);
   }
 
-  function playInstrumentVoice(track, time, midi, duration, velocity, outputTrack = track) {
+  function playInstrumentVoice(track, time, midi, duration, velocity, outputTrack = track, outputNode = outputTrack.gainNode) {
     const context = state.audioContext;
     const patch = track.patch || {};
     const frequency = 440 * Math.pow(2, (midi - 69) / 12);
@@ -4581,7 +4885,7 @@
     envelope.gain.linearRampToValueAtTime(0.0001, gateEnd + release);
     oscillator.connect(filter);
     filter.connect(envelope);
-    envelope.connect(outputTrack.gainNode);
+    envelope.connect(outputNode);
     oscillator.start(time);
     oscillator.stop(gateEnd + release + 0.02);
     if (patch.harmonic) {
@@ -4598,14 +4902,14 @@
     }
   }
 
-  function playDrumKitNote(track, time, midi, duration, velocity, outputTrack = track) {
+  function playDrumKitNote(track, time, midi, duration, velocity, outputTrack = track, outputNode = outputTrack.gainNode) {
     const kit = track.patch?.kit || "909";
     const sounds = DRUM_KIT_PROFILES[kit] || DRUM_KIT_PROFILES["909"];
     const scale = Math.max(0.25, Math.min(4, duration / getStepDuration()));
     const context = state.audioContext;
     const noteGain = state.audioContext.createGain();
     noteGain.gain.setValueAtTime(velocity, time);
-    noteGain.connect(outputTrack.gainNode);
+    noteGain.connect(outputNode);
     if (midi === 35 || midi === 36) playKick(context, noteGain, time, midi, sounds.kick, scale);
     else if (midi === 37) playRim(context, noteGain, time, sounds.rim, scale * 0.7);
     else if (midi === 38) playSnare(context, noteGain, time, sounds.snare, scale);
@@ -5042,6 +5346,10 @@
         variants: { ...pattern.variants },
         gridResolution: getPatternGridResolution(pattern),
         color: pattern.color,
+        volume: pattern.volume,
+        effects: makeDefaultEffects(pattern.effects),
+        effectSettings: makeDefaultEffectSettings(pattern.effectSettings),
+        effectChain: ensureTrackMixerState(pattern),
       })),
       tracks: state.tracks.map((track) => ({
         id: track.id,
@@ -5057,6 +5365,8 @@
         pitch: track.pitch || 0,
         swing: Number.isFinite(track.swing) ? track.swing : null,
         effects: makeDefaultEffects(track.effects),
+        effectSettings: makeDefaultEffectSettings(track.effectSettings),
+        effectChain: ensureTrackMixerState(track),
         sampleName: track.sample?.name || null,
       })),
       arrangementTracks: state.arrangementTracks.map((track) => ({
@@ -5067,6 +5377,8 @@
         muted: track.muted,
         solo: track.solo,
         effects: makeDefaultEffects(track.effects),
+        effectSettings: makeDefaultEffectSettings(track.effectSettings),
+        effectChain: ensureTrackMixerState(track),
       })),
       mels: state.mels.map((mel) => ({
         id: mel.id,
@@ -5085,6 +5397,8 @@
         muted: track.muted,
         solo: track.solo,
         effects: makeDefaultEffects(track.effects),
+        effectSettings: makeDefaultEffectSettings(track.effectSettings),
+        effectChain: ensureTrackMixerState(track),
         clips: track.clips.map((clip) => ({ ...clip })),
       })),
       patternClips: state.patternClips.map((clip) => ({ ...clip, repeatCount: clip.repeatCount || 1 })),
@@ -5309,6 +5623,8 @@
           if (Number.isFinite(savedTrack.pitch)) track.pitch = Math.max(-12, Math.min(12, savedTrack.pitch));
           if (Number.isFinite(savedTrack.swing)) track.swing = Math.max(0, Math.min(45, savedTrack.swing));
           track.effects = makeDefaultEffects(savedTrack.effects);
+          track.effectSettings = makeDefaultEffectSettings(savedTrack.effectSettings);
+          track.effectChain = Array.isArray(savedTrack.effectChain) ? savedTrack.effectChain : undefined;
           if (SOUND_VARIANTS[track.kind]?.some((sound) => sound.id === savedTrack.variant)) track.variant = savedTrack.variant;
           track.muted = savedTrack.muted === true;
           track.solo = savedTrack.solo === true;
@@ -5327,6 +5643,8 @@
             solo: track.solo === true,
             gainNode: null,
             effects: makeDefaultEffects(track.effects),
+            effectSettings: makeDefaultEffectSettings(track.effectSettings),
+            effectChain: Array.isArray(track.effectChain) ? track.effectChain : undefined,
           }));
       }
       if (Array.isArray(saved.patterns)) {
@@ -5350,6 +5668,7 @@
             return {
               id: pattern.id,
               name: pattern.name,
+              kind: "pattern",
               color: isPatternColor(pattern.color) ? pattern.color : getPatternColor(index),
               steps: patternSteps,
               trackIds: Array.isArray(pattern.trackIds)
@@ -5358,6 +5677,13 @@
               cells,
               variants,
               gridResolution,
+              volume: Number.isFinite(pattern.volume) ? Math.max(0, Math.min(1, pattern.volume)) : 1,
+              effects: makeDefaultEffects(pattern.effects),
+              effectSettings: makeDefaultEffectSettings(pattern.effectSettings),
+              effectChain: Array.isArray(pattern.effectChain) ? pattern.effectChain : undefined,
+              gainNode: null,
+              fxRuntime: null,
+              analyser: null,
             };
           });
         state.patterns = restoredPatterns.length
@@ -5469,6 +5795,8 @@
             solo: track.solo === true,
             gainNode: null,
             effects: makeDefaultEffects(track.effects),
+            effectSettings: makeDefaultEffectSettings(track.effectSettings),
+            effectChain: Array.isArray(track.effectChain) ? track.effectChain : undefined,
             clips: track.clips
               .filter((clip) => typeof clip?.id === "string" && state.mels.some((mel) => mel.id === clip.melId) && Number.isFinite(clip.startBar))
               .map((clip) => {
@@ -5543,9 +5871,11 @@
     const previousContext = state.audioContext;
     const previousMaster = state.masterGain;
     const previousNoise = state.noiseBuffer;
-    const allTracks = [...state.tracks, ...state.arrangementTracks, ...state.melTracks];
+    const allTracks = [...state.tracks, ...state.arrangementTracks, ...state.melTracks, ...state.patterns];
     const previousGains = allTracks.map((track) => track.gainNode);
     const previousFxRuntimes = allTracks.map((track) => track.fxRuntime);
+    const previousAnalysers = allTracks.map((track) => track.analyser);
+    const previousSourceGains = allTracks.map((track) => track.sourceGains);
     const button = $("#export-song-button");
     state.isExporting = true;
     button.disabled = true;
@@ -5562,11 +5892,13 @@
       const hasMelSolo = state.melTracks.some((track) => track.solo);
       allTracks.forEach((track) => {
         track.gainNode = context.createGain();
-        const isSilent = track.muted || (track.kind === "mel"
+        const isSilent = track.muted || (track.kind === "pattern" ? false : track.kind === "mel"
           ? hasMelSolo && !track.solo
           : hasSolo && !track.solo);
         track.gainNode.gain.value = isSilent ? 0 : track.volume;
         track.fxRuntime = null;
+        track.analyser = null;
+        track.sourceGains = null;
         track.effects = makeDefaultEffects(track.effects);
         rebuildTrackEffectChain(track);
       });
@@ -5589,7 +5921,8 @@
         const pattern = getPattern(clip.patternId);
         if (!pattern) return;
         const patternTrackIds = new Set(getPatternTrackIds(pattern));
-        const patternTracks = allTracks.filter((track) => patternTrackIds.has(track.id));
+        const patternSources = allTracks.filter((track) => patternTrackIds.has(track.id) && track.kind !== "pattern");
+        const patternTrack = state.patterns.find((item) => item.id === (clip.trackId || clip.patternId)) || pattern;
         const stepsPerBar = getStepsPerBar(pattern);
         const ticksPerGridStep = getGridTicksPerStep(pattern);
         const gridStepCount = getGridStepCount(pattern);
@@ -5606,10 +5939,11 @@
           const time = (clip.startBar + relativePosition) * secondsPerBar +
             (Math.floor(tick / 2) % 2 === 1 ? getStepDuration() * (state.swing / 100) : 0);
           if (time >= duration) continue;
-          patternTracks.forEach((track) => {
+          patternSources.forEach((track) => {
             if (pattern.cells[track.id]?.[patternStep] && !track.muted && (!hasSolo || track.solo)) {
               const trackTime = getTrackStepTime(track, patternStep, pattern, time);
-              triggerTrack(track, trackTime, patternStep, pattern.variants[track.id] || track.variant, getNoteDuration(pattern));
+              triggerTrack(track, trackTime, patternStep, pattern.variants[track.id] || track.variant,
+                getNoteDuration(pattern), patternTrack, getPatternSourceGain(patternTrack, track));
             }
           });
         }
@@ -5660,6 +5994,8 @@
         });
         track.gainNode = previousGains[index];
         track.fxRuntime = previousFxRuntimes[index];
+        track.analyser = previousAnalysers[index];
+        track.sourceGains = previousSourceGains[index];
       });
       state.isExporting = false;
       button.disabled = false;
@@ -5911,6 +6247,16 @@
     $("#step-track-mix-close").addEventListener("click", () => $("#step-track-mix-dialog").close());
     $("#step-track-mix-dialog").addEventListener("click", (event) => {
       if (event.target === $("#step-track-mix-dialog")) $("#step-track-mix-dialog").close();
+    });
+    $("#mixer-effect-close").addEventListener("click", () => $("#mixer-effect-dialog").close());
+    $("#mixer-effect-dialog").addEventListener("close", () => {
+      if ($("#mixer-effect-dialog").open) return;
+      if (state.mixerEffectAnimation !== null) cancelAnimationFrame(state.mixerEffectAnimation);
+      state.mixerEffectAnimation = null;
+      state.mixerEffectDialogTrackId = null;
+    });
+    $("#mixer-effect-dialog").addEventListener("click", (event) => {
+      if (event.target === $("#mixer-effect-dialog")) $("#mixer-effect-dialog").close();
     });
     $("#new-pattern-button").addEventListener("click", createPattern);
     $("#new-pattern-sequencer-button").addEventListener("click", createPattern);
