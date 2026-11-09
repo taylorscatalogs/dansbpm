@@ -81,6 +81,91 @@
       volume: 0.72, patch: { kit: id },
     };
   });
+  const EXTRA_DRUM_VARIANT_DATA = {
+    kick: [
+      ["studio-thump", "Studio Thump", { start: 166, end: 48, duration: 0.31, sweep: 0.38, clickCutoff: 2400, clickPeak: 0.08 }],
+      ["tape-punch", "Tape Punch", { start: 198, end: 56, duration: 0.24, sweep: 0.28, clickCutoff: 4200, clickPeak: 0.18 }],
+      ["sub-bloom", "Sub Bloom", { start: 84, end: 27, duration: 0.62, sweep: 0.46 }],
+      ["club-knock", "Club Knock", { start: 154, end: 51, duration: 0.29, sweep: 0.32, clickCutoff: 1800, clickPeak: 0.1 }],
+      ["round-909", "Round 909", { start: 142, end: 43, duration: 0.4, sweep: 0.4 }],
+      ["dusty-808", "Dusty 808", { start: 102, end: 32, duration: 0.52, sweep: 0.52, clickCutoff: 1300, clickPeak: 0.04 }],
+      ["hard-click", "Hard Click", { start: 215, end: 72, duration: 0.2, sweep: 0.22, clickCutoff: 6200, clickPeak: 0.24 }],
+      ["soft-felt", "Soft Felt", { start: 132, end: 38, duration: 0.48, sweep: 0.56, wave: "triangle" }],
+      ["long-drop", "Long Drop", { start: 126, end: 24, duration: 0.72, sweep: 0.64 }],
+      ["grit-pulse", "Grit Pulse", { start: 185, end: 49, duration: 0.34, sweep: 0.3, wave: "triangle", clickCutoff: 3300, clickPeak: 0.14 }],
+      ["deep-plate", "Deep Plate", { start: 74, end: 22, duration: 0.68, sweep: 0.5 }],
+      ["tight-driver", "Tight Driver", { start: 202, end: 61, duration: 0.22, sweep: 0.26, clickCutoff: 5000, clickPeak: 0.16 }],
+      ["thunder-low", "Thunder Low", { start: 96, end: 28, duration: 0.76, sweep: 0.58, wave: "triangle" }],
+    ],
+    snare: [
+      ["dry-studio", "Dry Studio", { noiseDuration: 0.13, cutoff: 1750, noisePeak: 0.32, bodyHz: 190, bodyDuration: 0.09, bodyPeak: 0.2 }],
+      ["wire-snap", "Wire Snap", { noiseDuration: 0.09, cutoff: 3900, noisePeak: 0.42, bodyHz: 260, bodyDuration: 0.065, bodyPeak: 0.14 }],
+      ["dusty-break", "Dusty Break", { noiseDuration: 0.24, cutoff: 1200, noisePeak: 0.38, bodyHz: 155, bodyDuration: 0.15, bodyPeak: 0.24 }],
+      ["wide-room", "Wide Room", { noiseDuration: 0.32, cutoff: 2100, noisePeak: 0.34, bodyHz: 205, bodyDuration: 0.2, bodyPeak: 0.16 }],
+      ["paper-crack", "Paper Crack", { noiseDuration: 0.075, cutoff: 5200, noisePeak: 0.46, bodyHz: 310, bodyDuration: 0.05, bodyPeak: 0.12 }],
+      ["metal-pop", "Metal Pop", { noiseDuration: 0.2, cutoff: 6200, noisePeak: 0.38, bodyHz: 420, bodyDuration: 0.12, bodyPeak: 0.22, bodyWave: "square" }],
+      ["low-body", "Low Body", { noiseDuration: 0.18, cutoff: 980, noisePeak: 0.28, bodyHz: 112, bodyDuration: 0.22, bodyPeak: 0.3 }],
+      ["bright-rim", "Bright Rim", { noiseDuration: 0.12, cutoff: 4600, noisePeak: 0.44, bodyHz: 350, bodyDuration: 0.075, bodyPeak: 0.16 }],
+      ["soft-brush", "Soft Brush", { noiseDuration: 0.28, cutoff: 2600, noisePeak: 0.22, bodyHz: 175, bodyDuration: 0.18, bodyPeak: 0.1 }],
+      ["tape-snap", "Tape Snap", { noiseDuration: 0.16, cutoff: 3200, noisePeak: 0.34, bodyHz: 225, bodyDuration: 0.12, bodyPeak: 0.2 }],
+      ["big-chamber", "Big Chamber", { noiseDuration: 0.38, cutoff: 1450, noisePeak: 0.42, bodyHz: 165, bodyDuration: 0.24, bodyPeak: 0.2 }],
+      ["gated-noise", "Gated Noise", { noiseDuration: 0.065, cutoff: 2500, noisePeak: 0.5, bodyHz: 185, bodyDuration: 0.06, bodyPeak: 0.16 }],
+      ["crunch-hit", "Crunch Hit", { noiseDuration: 0.15, cutoff: 5800, noisePeak: 0.48, bodyHz: 280, bodyDuration: 0.1, bodyPeak: 0.24, bodyWave: "square" }],
+    ],
+    clap: [
+      ["finger-snap", "Finger Snap", { offsets: [0, 0.012], tail: 0.09, cutoff: 2800, peak: 0.34, resonance: 0.8 }],
+      ["crowd-stack", "Crowd Stack", { offsets: [0, 0.018, 0.034, 0.052], tail: 0.26, cutoff: 1600, peak: 0.38, resonance: 0.7 }],
+      ["tight-hand", "Tight Hand", { offsets: [0, 0.01], tail: 0.08, cutoff: 1900, peak: 0.3 }],
+      ["vinyl-clap", "Vinyl Clap", { offsets: [0, 0.02, 0.045], tail: 0.16, cutoff: 1150, peak: 0.24, resonance: 0.9 }],
+      ["wide-palm", "Wide Palm", { offsets: [0, 0.016, 0.039, 0.067], tail: 0.21, cutoff: 2300, peak: 0.34 }],
+      ["short-room", "Short Room", { offsets: [0, 0.022, 0.046], tail: 0.12, cutoff: 950, peak: 0.26, resonance: 1.1 }],
+      ["plate-clap", "Plate Clap", { offsets: [0, 0.014, 0.03], tail: 0.31, cutoff: 3600, peak: 0.28, resonance: 0.6 }],
+      ["dusty-group", "Dusty Group", { offsets: [0, 0.024, 0.055], tail: 0.2, cutoff: 1350, peak: 0.3, resonance: 1.2 }],
+      ["bright-gang", "Bright Gang", { offsets: [0, 0.011, 0.029, 0.047], tail: 0.17, cutoff: 4800, peak: 0.32 }],
+      ["soft-double", "Soft Double", { offsets: [0, 0.031], tail: 0.22, cutoff: 1750, peak: 0.2, resonance: 0.7 }],
+      ["gated-crowd", "Gated Crowd", { offsets: [0, 0.012, 0.026, 0.041], tail: 0.095, cutoff: 3000, peak: 0.4 }],
+      ["neon-clap", "Neon Clap", { offsets: [0, 0.02, 0.045], tail: 0.25, cutoff: 5200, peak: 0.3, resonance: 0.5 }],
+      ["deep-room", "Deep Room", { offsets: [0, 0.03, 0.058], tail: 0.34, cutoff: 820, peak: 0.28, resonance: 1.3 }],
+    ],
+    hat: [
+      ["soft-tick", "Soft Tick", { duration: 0.075, cutoff: 3900, peak: 0.11, resonance: 0.7 }],
+      ["razor-closed", "Razor Closed", { duration: 0.038, cutoff: 11800, peak: 0.22, resonance: 0.45 }],
+      ["dusty-closed", "Dusty Closed", { duration: 0.095, cutoff: 4800, peak: 0.13, resonance: 1.2 }],
+      ["coin-shaker", "Coin Shaker", { duration: 0.11, cutoff: 7200, peak: 0.17, resonance: 0.9 }],
+      ["short-white", "Short White", { duration: 0.032, cutoff: 9600, peak: 0.2, resonance: 0.6 }],
+      ["bright-metal", "Bright Metal", { duration: 0.062, cutoff: 13200, peak: 0.24, resonance: 0.8 }],
+      ["muted-vinyl", "Muted Vinyl", { duration: 0.12, cutoff: 3000, peak: 0.15, resonance: 1.4 }],
+      ["needle-hat", "Needle Hat", { duration: 0.042, cutoff: 14500, peak: 0.19, resonance: 0.5 }],
+      ["sand-shaker", "Sand Shaker", { duration: 0.14, cutoff: 6400, peak: 0.13, resonance: 1.7 }],
+      ["dry-click", "Dry Click", { duration: 0.028, cutoff: 8200, peak: 0.18, resonance: 0.4 }],
+      ["glass-tick", "Glass Tick", { duration: 0.052, cutoff: 11200, peak: 0.2, resonance: 1.1 }],
+      ["wide-tss", "Wide Tss", { duration: 0.085, cutoff: 8900, peak: 0.21, resonance: 0.65 }],
+      ["crisp-16th", "Crisp 16th", { duration: 0.047, cutoff: 10500, peak: 0.16, resonance: 0.55 }],
+    ],
+    openhat: [
+      ["airy-open", "Airy Open", { duration: 0.42, cutoff: 7600, peak: 0.22, resonance: 0.7 }],
+      ["long-silver", "Long Silver", { duration: 0.68, cutoff: 10500, peak: 0.2, resonance: 0.6 }],
+      ["dark-breath", "Dark Breath", { duration: 0.38, cutoff: 3400, peak: 0.25, resonance: 1.1 }],
+      ["loose-wash", "Loose Wash", { duration: 0.8, cutoff: 5100, peak: 0.3, resonance: 0.9 }],
+      ["room-open", "Room Open", { duration: 0.48, cutoff: 6200, peak: 0.19, resonance: 1.3 }],
+      ["tape-sizzle", "Tape Sizzle", { duration: 0.56, cutoff: 8300, peak: 0.23, resonance: 1.5 }],
+      ["wide-air", "Wide Air", { duration: 0.72, cutoff: 12000, peak: 0.18, resonance: 0.55 }],
+      ["chrome-wash", "Chrome Wash", { duration: 0.64, cutoff: 9800, peak: 0.26, resonance: 0.8 }],
+      ["soft-open", "Soft Open", { duration: 0.36, cutoff: 4400, peak: 0.16, resonance: 0.7 }],
+      ["deep-shimmer", "Deep Shimmer", { duration: 0.74, cutoff: 6900, peak: 0.24, resonance: 1.4 }],
+      ["crash-hat", "Crash Hat", { duration: 0.9, cutoff: 11200, peak: 0.28, resonance: 0.65 }],
+      ["broken-metal", "Broken Metal", { duration: 0.5, cutoff: 3900, peak: 0.3, resonance: 2 }],
+      ["cloud-hat", "Cloud Hat", { duration: 0.88, cutoff: 5600, peak: 0.2, resonance: 1.6 }],
+    ],
+  };
+  const DRUM_VARIANT_SETTINGS = {};
+  Object.entries(EXTRA_DRUM_VARIANT_DATA).forEach(([kind, variants]) => {
+    DRUM_VARIANT_SETTINGS[kind] = {};
+    SOUND_VARIANTS[kind].push(...variants.map(([id, name, settings]) => {
+      DRUM_VARIANT_SETTINGS[kind][id] = settings;
+      return { id, name };
+    }));
+  });
   const VOICE_FAMILIES = [
     { family: "Synths", cutoff: 3600, names: ["Neon Saw", "Pulse Lead", "Sync Lead", "Hollow Square", "Vector Brass", "Digital Choir", "Drift Pad", "Orbit Sequence"] },
     { family: "Bass", cutoff: 1150, names: ["Rubber Bass", "Reese Bass", "Mono Pulse", "Glass Sub", "Round Finger", "Dirty Square", "Deep Triangle", "Resonant Bass"] },
@@ -187,7 +272,9 @@
   const MAX_PATTERN_BARS = 32;
   const MAX_PATTERN_STEPS = MAX_PATTERN_BARS * 16;
   const STEP_COUNT = MAX_PATTERN_BARS * 32;
-  const BAR_WIDTH = 116;
+  const BASE_BAR_WIDTH = 116;
+  let BAR_WIDTH = BASE_BAR_WIDTH;
+  const PIANO_TICK_WIDTH = 16;
   const MAX_ARRANGEMENT_BARS = 256;
   const TRACK_COLORS = ["#7cc9ff", "#ff9178", "#ee9df6", "#f6ca74", "#93e2bd"];
   const PATTERN_COLORS = ["#d3f36b", "#7cc9ff", "#ff9178", "#ee9df6", "#f6ca74", "#93e2bd", "#b5a0ff", "#f28dba"];
@@ -214,6 +301,7 @@
     selectedPatternId: null,
     arrangementTracks: [],
     patternClips: [],
+    arrangementScale: 1,
     mels: [],
     selectedMelId: null,
     melTracks: [],
@@ -221,6 +309,7 @@
     pianoStartBar: 0,
     pianoCursorTick: 0,
     pianoBars: 4,
+    pianoScale: 1,
     pianoSnap: 2,
     pianoNoteLength: 2,
     selectedPianoTrackId: "piano-grand",
@@ -228,6 +317,7 @@
     selectedPianoNoteIds: new Set(),
     selectedArrangementItems: new Set(),
     selectedStepCells: new Set(),
+    sequencerScale: 1,
     selectedMixerTrackId: null,
     selectedMixerEffectId: null,
     arrangementDrag: null,
@@ -414,10 +504,15 @@
     $("#increase-pattern-bars").disabled = bars >= MAX_PATTERN_BARS;
   }
 
+  function getPianoTickWidth() {
+    return PIANO_TICK_WIDTH * state.pianoScale;
+  }
+
   function setSequencerGridDimensions(stepCount, slotsPerBar = getStepsPerBar()) {
-    const cellWidth = 20;
-    const gap = 3;
-    const beatSpace = 4;
+    const scale = state.sequencerScale;
+    const cellWidth = 20 * scale;
+    const gap = 3 * scale;
+    const beatSpace = 4 * scale;
     const padding = 12;
     sequencerGridScroll.style.setProperty("--grid-step-count", String(stepCount));
     sequencerGridScroll.style.setProperty("--grid-step-size", `${cellWidth}px`);
@@ -426,6 +521,15 @@
     sequencerGridScroll.style.setProperty("--grid-content-width",
       `${stepCount * cellWidth + Math.max(0, stepCount - 1) * gap +
         Math.max(0, Math.round(stepCount / slotsPerBar) * 3) * beatSpace + padding}px`);
+  }
+
+  function setArrangementScale(scale) {
+    const timeline = $("#timeline-scroll");
+    const barOffset = timeline.scrollLeft / BAR_WIDTH;
+    state.arrangementScale = Math.max(0.5, Math.min(2, scale));
+    BAR_WIDTH = BASE_BAR_WIDTH * state.arrangementScale;
+    renderArrangement();
+    timeline.scrollLeft = barOffset * BAR_WIDTH;
   }
 
   function setStepCellValue(track, step, cell, value) {
@@ -776,7 +880,7 @@
     if (!marker) return;
     const maxTick = state.pianoBars * PIANO_TICKS_PER_BAR;
     const visibleTick = Math.max(0, Math.min(maxTick - 0.001, state.pianoCursorTick));
-    marker.style.left = `${visibleTick * 16}px`;
+    marker.style.left = `${visibleTick * getPianoTickWidth()}px`;
     marker.setAttribute("aria-valuenow", visibleTick.toFixed(2));
   }
 
@@ -822,7 +926,7 @@
     event.stopPropagation();
     const grid = $("#piano-roll-grid");
     const update = (moveEvent) => {
-      const tick = (moveEvent.clientX - grid.getBoundingClientRect().left) / 16;
+      const tick = (moveEvent.clientX - grid.getBoundingClientRect().left) / getPianoTickWidth();
       setPianoCursorTick(tick, true, false);
     };
     const finish = () => {
@@ -839,6 +943,8 @@
 
   function renderPianoRoll() {
     $("#piano-bars-select").value = String(state.pianoBars);
+    $("#piano-scale-slider").value = String(Math.round(state.pianoScale * 100));
+    $("#piano-scale-value").textContent = `${Math.round(state.pianoScale * 100)}%`;
     $("#piano-snap-select").value = String(state.pianoSnap);
     $("#piano-note-length-select").value = String(state.pianoNoteLength);
     const keys = $("#piano-roll-keys");
@@ -848,11 +954,15 @@
     ruler.replaceChildren();
     grid.replaceChildren();
     const totalTicks = state.pianoBars * PIANO_TICKS_PER_BAR;
-    const width = totalTicks * 16;
+    const tickWidth = getPianoTickWidth();
+    const width = totalTicks * tickWidth;
     const height = (PIANO_TOP_MIDI - PIANO_BOTTOM_MIDI + 1) * PIANO_ROW_HEIGHT;
     ruler.style.width = `${width}px`;
     grid.style.width = `${width}px`;
     grid.style.height = `${height}px`;
+    grid.style.setProperty("--piano-tick-width", `${tickWidth}px`);
+    grid.style.setProperty("--piano-beat-width", `${tickWidth * 8}px`);
+    grid.style.setProperty("--piano-bar-width", `${tickWidth * PIANO_TICKS_PER_BAR}px`);
     let playhead = $("#piano-roll-playhead");
     if (!playhead) {
       playhead = document.createElement("button");
@@ -876,6 +986,9 @@
     for (let bar = 0; bar < state.pianoBars; bar += 1) {
       const marker = document.createElement("div");
       marker.className = "piano-roll-bar";
+      marker.style.width = `${tickWidth * PIANO_TICKS_PER_BAR}px`;
+      marker.style.flexBasis = `${tickWidth * PIANO_TICKS_PER_BAR}px`;
+      marker.style.gridTemplateColumns = `repeat(4, ${tickWidth * 8}px)`;
       for (let beat = 0; beat < 4; beat += 1) {
         const label = document.createElement("span");
         label.textContent = beat === 0 ? `BAR ${bar + 1}` : String(beat + 1);
@@ -913,9 +1026,9 @@
         element.className = `piano-roll-note${state.selectedPianoNoteIds.has(note.id) || note.id === state.selectedPianoNoteId ? " is-selected" : ""}`;
         element.dataset.noteId = note.id;
         element.style.setProperty("--note-color", track.color);
-        element.style.left = `${note.startTick * 16 + 1}px`;
+        element.style.left = `${note.startTick * tickWidth + 1}px`;
         element.style.top = `${(PIANO_TOP_MIDI - note.midi) * PIANO_ROW_HEIGHT + 1}px`;
-        element.style.width = `${Math.max(14, note.durationTicks * 16 - 2)}px`;
+        element.style.width = `${Math.max(tickWidth, note.durationTicks * tickWidth - 2)}px`;
         element.textContent = midiNoteName(note.midi);
         element.title = `${track.name} · ${midiNoteName(note.midi)} · ${note.durationTicks}/32`;
         element.setAttribute("role", "button");
@@ -942,7 +1055,7 @@
     const grid = $("#piano-roll-grid");
     const rect = grid.getBoundingClientRect();
     const totalTicks = state.pianoBars * PIANO_TICKS_PER_BAR;
-    const rawTick = Math.max(0, Math.min(totalTicks - 1, (event.clientX - rect.left) / 16));
+    const rawTick = Math.max(0, Math.min(totalTicks - 1, (event.clientX - rect.left) / getPianoTickWidth()));
     const startTick = Math.floor(rawTick / state.pianoSnap) * state.pianoSnap;
     const row = Math.max(0, Math.min(PIANO_TOP_MIDI - PIANO_BOTTOM_MIDI, Math.floor((event.clientY - rect.top) / PIANO_ROW_HEIGHT)));
     const midi = PIANO_TOP_MIDI - row;
@@ -1001,7 +1114,7 @@
     const totalTicks = state.pianoBars * PIANO_TICKS_PER_BAR;
     const noteElements = new Map(Array.from(document.querySelectorAll(".piano-roll-note"), (item) => [item.dataset.noteId, item]));
     const update = (moveEvent) => {
-      const delta = Math.round((moveEvent.clientX - startX) / 16 / state.pianoSnap) * state.pianoSnap;
+      const delta = Math.round((moveEvent.clientX - startX) / getPianoTickWidth() / state.pianoSnap) * state.pianoSnap;
       if (resizing) {
         note.durationTicks = Math.max(1, Math.min(totalTicks - note.startTick, Math.round((durationTicks + delta) / state.pianoSnap) * state.pianoSnap));
       } else {
@@ -1020,9 +1133,9 @@
       originals.forEach((original) => {
         const target = noteElements.get(original.note.id);
         if (!target) return;
-        target.style.left = `${original.note.startTick * 16 + 1}px`;
+        target.style.left = `${original.note.startTick * getPianoTickWidth() + 1}px`;
         target.style.top = `${(PIANO_TOP_MIDI - original.note.midi) * PIANO_ROW_HEIGHT + 1}px`;
-        target.style.width = `${Math.max(14, original.note.durationTicks * 16 - 2)}px`;
+        target.style.width = `${Math.max(getPianoTickWidth(), original.note.durationTicks * getPianoTickWidth() - 2)}px`;
         const resizeHandle = target.querySelector(".piano-roll-note-resize");
         target.textContent = midiNoteName(original.note.midi);
         if (resizeHandle) target.append(resizeHandle);
@@ -1468,6 +1581,8 @@
 
   function renderHeader() {
     stepsHeader.innerHTML = "";
+    $("#sequencer-scale-slider").value = String(Math.round(state.sequencerScale * 100));
+    $("#sequencer-scale-value").textContent = `${Math.round(state.sequencerScale * 100)}%`;
     const slotsPerBar = getStepsPerBar();
     const stepCount = getGridStepCount();
     setSequencerGridDimensions(stepCount, slotsPerBar);
@@ -2789,7 +2904,10 @@
   }
 
   function renderArrangement() {
+    BAR_WIDTH = BASE_BAR_WIDTH * state.arrangementScale;
     $("#arrangement-empty").hidden = state.view !== "arrangement";
+    $("#arrangement-scale-slider").value = String(Math.round(state.arrangementScale * 100));
+    $("#arrangement-scale-value").textContent = `${Math.round(state.arrangementScale * 100)}%`;
     const snapButton = $("#arrangement-snap-button");
     snapButton.textContent = `SNAP ${state.arrangementSnap ? "ON" : "OFF"}`;
     snapButton.setAttribute("aria-pressed", String(state.arrangementSnap));
@@ -5211,18 +5329,21 @@
   function playKick(context, output, time, step, variant, durationScale, pitchRatio = 1) {
     const osc = context.createOscillator();
     const envelope = context.createGain();
-    const settings = {
+    const legacy = {
       classic: [148, 43, 0.36],
       deep: [92, 31, 0.56],
       punch: [182, 58, 0.23],
       sub: [72, 24, 0.7],
       industrial: [120, 27, 0.4],
     }[variant] || [148, 43, 0.36];
-    const duration = settings[2] * durationScale;
-    const pitch = settings[0] * (step % 8 === 0 ? 1 : 0.88) * pitchRatio;
-    osc.type = "sine";
+    const settings = DRUM_VARIANT_SETTINGS.kick?.[variant] || {
+      start: legacy[0], end: legacy[1], duration: legacy[2], wave: "sine",
+    };
+    const duration = settings.duration * durationScale;
+    const pitch = settings.start * (step % 8 === 0 ? 1 : 0.88) * pitchRatio;
+    osc.type = settings.wave || "sine";
     osc.frequency.setValueAtTime(pitch, time);
-    osc.frequency.exponentialRampToValueAtTime(settings[1] * pitchRatio, time + duration * 0.38);
+    osc.frequency.exponentialRampToValueAtTime(settings.end * pitchRatio, time + duration * (settings.sweep || 0.38));
     envelope.gain.setValueAtTime(0.0001, time);
     envelope.gain.exponentialRampToValueAtTime(1, time + 0.004);
     envelope.gain.exponentialRampToValueAtTime(0.0001, time + duration);
@@ -5230,6 +5351,9 @@
     envelope.connect(output);
     osc.start(time);
     osc.stop(time + duration + 0.02);
+    if (settings.clickPeak) {
+      playNoise(context, output, time, 0.018 * durationScale, settings.clickCutoff, settings.clickPeak);
+    }
   }
 
   function playNoise(context, output, time, duration, cutoff, peak = 0.35, resonance = 0.7) {
@@ -5251,44 +5375,54 @@
   }
 
   function playSnare(context, output, time, variant, durationScale, pitchRatio = 1) {
-    const settings = {
+    const legacy = {
       classic: [0.17, 1500, 0.36, 185, 0.1],
       tight: [0.1, 2300, 0.32, 235, 0.075],
       noise: [0.23, 1000, 0.48, 145, 0.14],
       body: [0.2, 1250, 0.34, 125, 0.18],
       metal: [0.17, 4100, 0.4, 330, 0.085],
     }[variant] || [0.17, 1500, 0.36, 185, 0.1];
-    playNoise(context, output, time, settings[0] * durationScale, settings[1] * pitchRatio, settings[2]);
+    const preset = DRUM_VARIANT_SETTINGS.snare?.[variant];
+    const settings = preset || {
+      noiseDuration: legacy[0], cutoff: legacy[1], noisePeak: legacy[2],
+      bodyHz: legacy[3], bodyDuration: legacy[4], bodyPeak: 0.2, resonance: 0.7, bodyWave: "triangle",
+    };
+    playNoise(context, output, time, settings.noiseDuration * durationScale, settings.cutoff * pitchRatio, settings.noisePeak, settings.resonance);
     const body = context.createOscillator();
     const envelope = context.createGain();
-    body.type = "triangle";
-    body.frequency.setValueAtTime(settings[3] * pitchRatio, time);
-    envelope.gain.setValueAtTime(0.2, time);
-    envelope.gain.exponentialRampToValueAtTime(0.0001, time + settings[4] * durationScale);
+    body.type = settings.bodyWave || "triangle";
+    body.frequency.setValueAtTime(settings.bodyHz * pitchRatio, time);
+    envelope.gain.setValueAtTime(settings.bodyPeak, time);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, time + settings.bodyDuration * durationScale);
     body.connect(envelope);
     envelope.connect(output);
     body.start(time);
-    body.stop(time + settings[4] * durationScale + 0.02);
+    body.stop(time + settings.bodyDuration * durationScale + 0.02);
   }
 
   function playClap(context, output, time, variant, durationScale, pitchRatio = 1) {
-    const settings = {
+    const legacy = {
       classic: [[0, 0.018, 0.038], 0.17, 1100, 0.28],
       tight: [[0, 0.012], 0.1, 1500, 0.27],
       layered: [[0, 0.018, 0.038, 0.062], 0.22, 900, 0.34],
       room: [[0, 0.024, 0.052], 0.28, 720, 0.31],
     }[variant] || [[0, 0.018, 0.038], 0.17, 1100, 0.28];
-    settings[0].forEach((offset, index) => {
-      const last = index === settings[0].length - 1;
-      playNoise(context, output, time + offset * durationScale, (last ? settings[1] : 0.045) * durationScale, settings[2] * pitchRatio, last ? settings[3] : 0.2);
+    const preset = DRUM_VARIANT_SETTINGS.clap?.[variant];
+    const settings = preset || { offsets: legacy[0], tail: legacy[1], cutoff: legacy[2], peak: legacy[3], resonance: 0.7 };
+    settings.offsets.forEach((offset, index) => {
+      const last = index === settings.offsets.length - 1;
+      const peak = last ? settings.peak : (preset ? settings.peak * 0.7 : 0.2);
+      playNoise(context, output, time + offset * durationScale, (last ? settings.tail : 0.045) * durationScale, settings.cutoff * pitchRatio, peak, settings.resonance);
     });
   }
 
   function playHat(context, output, time, open, variant, durationScale, pitchRatio = 1) {
-    const settings = open
+    const legacy = open
       ? ({ classic: [0.34, 6500, 0.2], shimmer: [0.48, 9000, 0.22], dark: [0.3, 3800, 0.25], wash: [0.7, 5200, 0.3] }[variant] || [0.34, 6500, 0.2])
       : ({ classic: [0.055, 6500, 0.16], soft: [0.07, 4300, 0.12], bright: [0.045, 10000, 0.2], vinyl: [0.09, 3200, 0.18] }[variant] || [0.055, 6500, 0.16]);
-    playNoise(context, output, time, settings[0] * durationScale, settings[1] * pitchRatio, settings[2], 0.55);
+    const preset = DRUM_VARIANT_SETTINGS[open ? "openhat" : "hat"]?.[variant];
+    const settings = preset || { duration: legacy[0], cutoff: legacy[1], peak: legacy[2], resonance: 0.55 };
+    playNoise(context, output, time, settings.duration * durationScale, settings.cutoff * pitchRatio, settings.peak, settings.resonance);
   }
 
   function playRim(context, output, time, variant, durationScale, pitchRatio = 1) {
@@ -5615,13 +5749,16 @@
       pianoStartBar: state.pianoStartBar,
       pianoCursorTick: state.pianoCursorTick,
       pianoBars: state.pianoBars,
+      pianoScale: state.pianoScale,
       pianoSnap: state.pianoSnap,
       pianoNoteLength: state.pianoNoteLength,
       selectedPianoTrackId: state.selectedPianoTrackId,
       arrangementBars: state.arrangementBars,
+      arrangementScale: state.arrangementScale,
       arrangementCursor: state.arrangementCursor,
       arrangementSnap: state.arrangementSnap,
       workspaceRatio: state.workspaceRatio,
+      sequencerScale: state.sequencerScale,
       workspaceHidden: state.workspaceHidden,
       trackViewHidden: state.trackViewHidden,
       view: state.view,
@@ -5778,6 +5915,9 @@
       if (Number.isFinite(saved.bpm)) state.bpm = Math.max(60, Math.min(180, Math.round(saved.bpm)));
       if (Number.isFinite(saved.swing)) state.swing = Math.max(0, Math.min(45, Math.round(saved.swing)));
       if (Number.isFinite(saved.steps)) state.steps = normalizePatternSteps(saved.steps);
+      if (Number.isFinite(saved.arrangementScale)) state.arrangementScale = Math.max(0.5, Math.min(2, saved.arrangementScale));
+      if (Number.isFinite(saved.pianoScale)) state.pianoScale = Math.max(0.5, Math.min(2, saved.pianoScale));
+      if (Number.isFinite(saved.sequencerScale)) state.sequencerScale = Math.max(0.5, Math.min(2, saved.sequencerScale));
       if (Number.isFinite(saved.arrangementBars)) state.arrangementBars = Math.max(32, Math.min(MAX_ARRANGEMENT_BARS, Math.round(saved.arrangementBars)));
       if (Number.isFinite(saved.arrangementCursor)) state.arrangementCursor = Math.max(0, Math.min(state.arrangementBars - 0.001, saved.arrangementCursor));
       if (typeof saved.arrangementSnap === "boolean") state.arrangementSnap = saved.arrangementSnap;
@@ -6404,6 +6544,11 @@
       renderPianoRoll();
       saveState();
     });
+    $("#piano-scale-slider").addEventListener("input", (event) => {
+      state.pianoScale = Number(event.target.value) / 100;
+      renderPianoRoll();
+    });
+    $("#piano-scale-slider").addEventListener("change", saveState);
     $("#piano-roll-grid").addEventListener("click", (event) => {
       if (state.suppressPianoGridClick) {
         state.suppressPianoGridClick = false;
@@ -6443,6 +6588,12 @@
     $("#grid-resolution-select").addEventListener("change", (event) => {
       setPatternGridResolution(event.target.value);
     });
+    $("#sequencer-scale-slider").addEventListener("input", (event) => {
+      state.sequencerScale = Number(event.target.value) / 100;
+      $("#sequencer-scale-value").textContent = `${event.target.value}%`;
+      setSequencerGridDimensions(getGridStepCount(), getStepsPerBar());
+    });
+    $("#sequencer-scale-slider").addEventListener("change", saveState);
     $("#arrangement-pattern-select").addEventListener("change", (event) => selectPattern(event.target.value));
     $("#rename-pattern-sequencer-button").addEventListener("click", renamePattern);
     $("#rename-pattern-button").addEventListener("click", renamePattern);
@@ -6501,6 +6652,10 @@
       renderArrangement();
       saveState();
     });
+    $("#arrangement-scale-slider").addEventListener("input", (event) => {
+      setArrangementScale(Number(event.target.value) / 100);
+    });
+    $("#arrangement-scale-slider").addEventListener("change", saveState);
     $("#record-audio-button").addEventListener("click", toggleAudioRecording);
     $("#arrangement-clear-button").addEventListener("click", () => {
       if (!state.arrangementTracks.length && !state.patternClips.length && !state.melTracks.length) return;
@@ -6548,6 +6703,7 @@
       state.pianoNotes = [];
       state.pianoStartBar = 0;
       state.pianoBars = 4;
+      state.pianoScale = 1;
       state.pianoSnap = 2;
       state.pianoNoteLength = 2;
       state.selectedPianoTrackId = "piano-grand";
@@ -6561,9 +6717,11 @@
       state.selectedArrangementItems.clear();
       state.arrangementSelectionFromMarquee = false;
       state.arrangementBars = 32;
+      state.arrangementScale = 1;
       state.arrangementCursor = 0;
       state.arrangementSnap = true;
       state.workspaceRatio = 50;
+      state.sequencerScale = 1;
       state.workspaceHidden = false;
       state.trackViewHidden = false;
       state.bpm = 124;

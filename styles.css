@@ -331,17 +331,17 @@ kbd { border: 1px solid #393a3f; border-radius: 3px; padding: 2px 4px; color: #b
 .piano-roll-key.is-octave { color: #9aab63; font-weight: 700; }
 .piano-roll-editor { position: relative; flex: 0 0 auto; }
 .piano-roll-ruler { height: 28px; display: flex; background: #202125; }
-.piano-roll-bar { width: 512px; flex: 0 0 512px; display: grid; grid-template-columns: repeat(4, 128px); border-right: 1px solid #54565b; color: #aaa; font-family: var(--mono); font-size: 8px; }
+.piano-roll-bar { width: var(--piano-bar-width, 512px); flex: 0 0 var(--piano-bar-width, 512px); display: grid; grid-template-columns: repeat(4, var(--piano-beat-width, 128px)); border-right: 1px solid #54565b; color: #aaa; font-family: var(--mono); font-size: 8px; }
 .piano-roll-bar > span { display: flex; align-items: center; border-right: 1px solid #333439; padding-left: 5px; }
 .piano-roll-bar > span:first-child { color: var(--accent); }
-.piano-roll-grid { position: relative; overflow: hidden; background-color: #1a1b1e; background-image: repeating-linear-gradient(to right, transparent 0, transparent 15px, #2a2b30 15px, #2a2b30 16px), repeating-linear-gradient(to right, transparent 0, transparent 127px, #44454a 127px, #44454a 128px), repeating-linear-gradient(to right, transparent 0, transparent 511px, #707176 511px, #707176 512px); touch-action: none; }
+.piano-roll-grid { position: relative; overflow: hidden; background-color: #1a1b1e; background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(var(--piano-tick-width, 16px) - 1px), #2a2b30 calc(var(--piano-tick-width, 16px) - 1px), #2a2b30 var(--piano-tick-width, 16px)), repeating-linear-gradient(to right, transparent 0, transparent calc(var(--piano-beat-width, 128px) - 1px), #44454a calc(var(--piano-beat-width, 128px) - 1px), #44454a var(--piano-beat-width, 128px)), repeating-linear-gradient(to right, transparent 0, transparent calc(var(--piano-bar-width, 512px) - 1px), #707176 calc(var(--piano-bar-width, 512px) - 1px), #707176 var(--piano-bar-width, 512px)); touch-action: none; }
 .piano-roll-playhead { position: absolute; top: 0; bottom: 0; z-index: 4; width: 12px; transform: translateX(-6px); border: 0; background: transparent; padding: 0; cursor: ew-resize; touch-action: none; }
 .piano-roll-playhead::before { position: absolute; top: 0; left: 1px; width: 10px; height: 8px; background: #f3f4e8; clip-path: polygon(0 0, 100% 0, 50% 100%); content: ""; }
 .piano-roll-playhead::after { position: absolute; top: 6px; bottom: 0; left: 5px; width: 2px; background: #f3f4e8; box-shadow: 0 0 7px #fff8; content: ""; }
 .piano-roll-row { position: absolute; left: 0; right: 0; height: 18px; border-bottom: 1px solid #2a2b30; pointer-events: none; }
 .piano-roll-row.is-black { background: #15161966; }
 .piano-roll-row.is-c { border-bottom-color: #494a50; }
-.piano-roll-note { position: absolute; z-index: 2; height: 15px; min-width: 16px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--note-color), white 22%); border-radius: 3px; background: color-mix(in srgb, var(--note-color), transparent 25%); padding: 0 10px 0 4px; color: #17181a; font-size: 8px; line-height: 13px; white-space: nowrap; cursor: grab; user-select: none; }
+.piano-roll-note { position: absolute; z-index: 2; height: 15px; min-width: var(--piano-tick-width, 16px); overflow: hidden; border: 1px solid color-mix(in srgb, var(--note-color), white 22%); border-radius: 3px; background: color-mix(in srgb, var(--note-color), transparent 25%); padding: 0 10px 0 4px; color: #17181a; font-size: 8px; line-height: 13px; white-space: nowrap; cursor: grab; user-select: none; }
 .piano-roll-note.is-selected { z-index: 4; outline: 1px solid #fff; }
 .piano-roll-note:active { cursor: grabbing; }
 .piano-roll-note-resize { position: absolute; top: 0; right: 0; bottom: 0; width: 8px; border-right: 2px solid #fff9; cursor: ew-resize; }
@@ -551,6 +551,10 @@ body:not(.is-beat-grid-open) #export-button { display: none; }
 .pattern-select-control > span { color: #77787e; font-family: var(--mono); font-size: 7px; letter-spacing: .35px; }
 .pattern-select-control select { max-width: 112px; border: 0; background: transparent; color: #d3d4d0; font-size: 9px; }
 .pattern-select-control select:focus-visible { outline-offset: 0; }
+.scale-control { display: flex; height: 30px; align-items: center; gap: 5px; border: 1px solid var(--stroke); border-radius: 5px; background: #1a1b1e; padding: 0 6px; }
+.scale-control > span { color: #77787e; font-family: var(--mono); font-size: 7px; letter-spacing: .35px; }
+.scale-control input { width: 58px; height: 14px; margin: 0; accent-color: var(--accent); }
+.scale-control output { min-width: 31px; color: #b7b8bd; font-family: var(--mono); font-size: 8px; text-align: right; }
 .preload-pattern-select { max-width: 180px; }
 .pattern-drag-source { border-style: dashed; border-color: color-mix(in srgb, var(--pattern-color), transparent 68%); color: var(--pattern-color); cursor: grab; }
 .pattern-drag-source:active { cursor: grabbing; }
@@ -579,6 +583,9 @@ body:not(.is-beat-grid-open) #export-button { display: none; }
 .track-view-heading { justify-content: space-between; border-top: 0; }
 .track-view-controls { display: flex; align-items: center; gap: 8px; }
 .track-view-controls .quiet-button { height: 22px; padding: 0 8px; font-size: 8px; letter-spacing: 0; }
+.track-view-controls .scale-control { height: 22px; gap: 3px; padding: 0 4px; }
+.track-view-controls .scale-control input { width: 42px; }
+.track-view-controls .scale-control output { min-width: 27px; font-size: 7px; }
 .arrangement-editor { height: auto; min-height: 0; flex: 1; grid-template-columns: 158px minmax(0, 1fr); }
 .arrangement-track-column { display: flex; min-height: 0; flex-direction: column; overflow: hidden; }
 .arrangement-track-labels { min-height: 0; flex: 1; overflow: hidden; }
