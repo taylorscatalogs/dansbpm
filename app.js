@@ -282,6 +282,8 @@
       "piano-roll": null,
     },
   };
+  let stepPaint = null;
+  let suppressStepClick = false;
 
   const $ = (selector) => document.querySelector(selector);
   const trackList = $("#track-list");
@@ -379,15 +381,48 @@
     }
   }
 
-  function setSequencerGridDimensions(stepCount) {
-    const cellWidth = 14;
-    const gap = 2;
+  function setSequencerGridDimensions(stepCount, slotsPerBar = getStepsPerBar()) {
+    const cellWidth = 20;
+    const gap = 3;
+    const beatSpace = 4;
     const padding = 12;
     sequencerGridScroll.style.setProperty("--grid-step-count", String(stepCount));
     sequencerGridScroll.style.setProperty("--grid-step-size", `${cellWidth}px`);
     sequencerGridScroll.style.setProperty("--grid-step-gap", `${gap}px`);
+    sequencerGridScroll.style.setProperty("--grid-beat-space", `${beatSpace}px`);
     sequencerGridScroll.style.setProperty("--grid-content-width",
-      `${stepCount * cellWidth + Math.max(0, stepCount - 1) * gap + padding}px`);
+      `${stepCount * cellWidth + Math.max(0, stepCount - 1) * gap +
+        Math.max(0, Math.round(stepCount / slotsPerBar) * 3) * beatSpace + padding}px`);
+  }
+
+  function setStepCellValue(track, step, cell, value) {
+    if (track.cells[step] === value) return;
+    track.cells[step] = value;
+    cell.classList.toggle("is-on", value);
+    cell.setAttribute("aria-pressed", String(value));
+    cell.setAttribute("aria-label", `${track.name}, step ${step + 1}${value ? ", on" : ", off"}`);
+    if (stepPaint) stepPaint.changed = true;
+  }
+
+  function paintStepAtPointer(event) {
+    if (!stepPaint || event.pointerId !== stepPaint.pointerId) return;
+    const target = document.elementFromPoint(event.clientX, event.clientY);
+    const cell = target instanceof Element ? target.closest(".step-cell") : null;
+    const row = cell?.closest(".track-row");
+    const track = row && state.tracks.find((item) => item.id === row.dataset.trackId);
+    const step = Number(cell?.dataset.step);
+    if (cell && track && Number.isInteger(step)) {
+      event.preventDefault();
+      setStepCellValue(track, step, cell, stepPaint.value);
+    }
+  }
+
+  function finishStepPaint(event) {
+    if (!stepPaint || event.pointerId !== stepPaint.pointerId) return;
+    const changed = stepPaint.changed;
+    stepPaint = null;
+    if (changed) saveState();
+    window.setTimeout(() => { suppressStepClick = false; }, 0);
   }
 
   function remapGridCells(cells, bars, previousSlotsPerBar, nextSlotsPerBar) {
@@ -1166,7 +1201,7 @@
     stepsHeader.innerHTML = "";
     const slotsPerBar = getStepsPerBar();
     const stepCount = getGridStepCount();
-    setSequencerGridDimensions(stepCount);
+    setSequencerGridDimensions(stepCount, slotsPerBar);
     for (let step = 0; step < stepCount; step += 1) {
       const barStep = step % slotsPerBar;
       const stepsPerBeat = slotsPerBar / 4;
@@ -1182,7 +1217,7 @@
     const includedTrackIds = new Set(getPatternTrackIds(getPattern()));
     const visibleTracks = state.tracks.filter((track) => includedTrackIds.has(track.id));
     const liveKeys = state.keyboardRecording?.mode === "sequencer" ? getStepKeyboardMap() : null;
-    setSequencerGridDimensions(getGridStepCount());
+    setSequencerGridDimensions(getGridStepCount(), getStepsPerBar());
     visibleTracks.forEach((track) => {
       const row = document.createElement("div");
       row.className = "track-row";
@@ -1190,8 +1225,8 @@
       row.style.setProperty("--track-color", track.color);
       const slotsPerBar = getStepsPerBar();
       const stepCount = getGridStepCount();
-      const cellHeight = 18;
-      row.style.minHeight = "42px";
+      const cellHeight = 21;
+      row.style.minHeight = "44px";
 
       const meta = document.createElement("div");
       meta.className = "track-meta";
@@ -1260,6 +1295,12 @@
         cell.setAttribute("aria-label", `${track.name}, step ${step + 1}${track.cells[step] ? ", on" : ", off"}`);
         cell.setAttribute("aria-pressed", String(track.cells[step]));
         if (state.currentStep === step) cell.classList.add("is-playhead");
+        cell.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0 || event.pointerType !== "mouse" || event.shiftKey) return;
+          stepPaint = { pointerId: event.pointerId, value: !track.cells[step], changed: false };
+          suppressStepClick = true;
+          setStepCellValue(track, step, cell, stepPaint.value);
+        });
         cell.addEventListener("click", (event) => {
           const cellKey = `${track.id}:${step}`;
           if (event.shiftKey) {
@@ -1274,12 +1315,13 @@
             cell.classList.add("is-selected");
             return;
           }
+          if (suppressStepClick) {
+            suppressStepClick = false;
+            return;
+          }
           state.selectedStepCells.delete(cellKey);
           cell.classList.remove("is-selected");
-          track.cells[step] = !track.cells[step];
-          cell.classList.toggle("is-on", track.cells[step]);
-          cell.setAttribute("aria-pressed", String(track.cells[step]));
-          cell.setAttribute("aria-label", `${track.name}, step ${step + 1}${track.cells[step] ? ", on" : ", off"}`);
+          setStepCellValue(track, step, cell, !track.cells[step]);
           saveState();
         });
         grid.append(cell);
@@ -5176,6 +5218,9 @@
   }
 
   function bindEvents() {
+    document.addEventListener("pointermove", paintStepAtPointer);
+    document.addEventListener("pointerup", finishStepPaint);
+    document.addEventListener("pointercancel", finishStepPaint);
     playButton.addEventListener("click", () => {
       if (state.keyboardRecordingCountdown) cancelKeyboardRecordingCountdown();
       else if (state.isPlaying) stopPlayback();
