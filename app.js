@@ -298,13 +298,14 @@
   const sampleInput = $("#sample-input");
   const drumSamplesInput = $("#drum-samples-input");
   const toast = $("#toast");
+  let stepInstrumentTargetTrackId = null;
 
   function makeTracks() {
     const tracks = [...TRACKS, ...LIBRARY_TRACKS].map((definition) => {
       const cells = Array(STEP_COUNT).fill(false);
       definition.hits?.forEach((step) => { cells[step] = true; });
       return {
-        ...definition, cells, variant: definition.variant || "classic", muted: false, solo: false,
+        ...definition, cells, variant: definition.variant || "classic", muted: false, solo: false, pitch: 0, swing: null,
         sample: null, gainNode: null, effects: makeDefaultEffects(),
       };
     });
@@ -476,7 +477,13 @@
   }
 
   function getPatternTrackIds(pattern) {
-    return Array.isArray(pattern?.trackIds) ? pattern.trackIds : state.tracks.filter((track) => !track.libraryOnly).map((track) => track.id);
+    const trackIds = Array.isArray(pattern?.trackIds)
+      ? pattern.trackIds
+      : state.tracks.filter((track) => !track.libraryOnly).map((track) => track.id);
+    return trackIds.filter((trackId) => {
+      const track = state.tracks.find((item) => item.id === trackId);
+      return track && !track.libraryOnly && track.kind !== "drumkit";
+    });
   }
 
   function makePatternSnapshot(id, name, color = getPatternColor(state.patterns.length)) {
@@ -491,7 +498,7 @@
       name,
       color,
       steps: state.steps,
-      trackIds: state.tracks.filter((track) => !track.libraryOnly).map((track) => track.id),
+      trackIds: state.tracks.filter((track) => !track.libraryOnly && track.kind !== "drumkit").map((track) => track.id),
       cells,
       variants,
       gridResolution: "1/16",
@@ -566,32 +573,6 @@
     dragSource.disabled = !selected;
     dragSource.style.setProperty("--pattern-color", selected?.color || "var(--accent)");
     $("#grid-resolution-select").value = getPatternGridResolution(selected);
-    renderPatternInstrumentOptions();
-  }
-
-  function renderPatternInstrumentOptions() {
-    const available = state.tracks.filter((track) => !track.sourceId);
-    [
-      ["#sequencer-instrument-select", "#add-sequencer-instrument-button"],
-      ["#pattern-instrument-select", "#add-pattern-instrument-button"],
-    ].forEach(([selectSelector, buttonSelector]) => {
-      const select = $(selectSelector);
-      const addButton = $(buttonSelector);
-      select.replaceChildren();
-      const placeholder = document.createElement("option");
-      placeholder.value = "";
-      placeholder.textContent = available.length ? "Choose instrument…" : "No instruments available";
-      placeholder.disabled = true;
-      placeholder.selected = true;
-      select.append(placeholder);
-      available.forEach((track) => {
-        const option = document.createElement("option");
-        option.value = track.id;
-        option.textContent = track.name;
-        select.append(option);
-      });
-      addButton.disabled = available.length === 0;
-    });
   }
 
   function getPianoTrack(trackId = state.selectedPianoTrackId) {
@@ -1166,8 +1147,8 @@
 
   function addPatternInstrument(trackId) {
     const pattern = getPattern();
-    const source = state.tracks.find((item) => item.id === trackId && !item.sourceId);
-    if (!pattern || !source) return;
+    const source = state.tracks.find((item) => item.id === trackId && !item.sourceId && item.kind !== "drumkit");
+    if (!pattern || !source) return false;
     captureCurrentPattern();
     const layerCount = getPatternTrackIds(pattern).filter((id) => {
       const layer = state.tracks.find((item) => item.id === id);
@@ -1184,6 +1165,161 @@
     renderPatternSelectors();
     saveState();
     showToast(`${track.name} added to ${pattern.name}`);
+    return true;
+  }
+
+  function getStepInstrumentGroup(track) {
+    if (track.family) return track.family;
+    if (track.kind === "sample") return "User Samples";
+    return "Drums";
+  }
+
+  function openStepInstrumentPicker(targetTrackId = null) {
+    stepInstrumentTargetTrackId = targetTrackId;
+    const library = $("#step-instrument-library");
+    library.replaceChildren();
+    const groups = new Map();
+    state.tracks
+      .filter((track) => !track.sourceId && track.kind !== "drumkit")
+      .forEach((track) => {
+        const groupName = getStepInstrumentGroup(track);
+        if (!groups.has(groupName)) groups.set(groupName, []);
+        groups.get(groupName).push(track);
+      });
+    Array.from(groups.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .forEach(([groupName, instruments]) => {
+        const group = document.createElement("section");
+        group.className = "step-instrument-group";
+        const heading = document.createElement("h3");
+        heading.textContent = groupName;
+        const choices = document.createElement("div");
+        choices.className = "step-instrument-choices";
+        instruments
+          .sort((left, right) => left.name.localeCompare(right.name))
+          .forEach((instrument) => {
+            const choice = document.createElement("button");
+            choice.className = "step-instrument-choice";
+            choice.type = "button";
+            choice.style.setProperty("--instrument-color", instrument.color);
+            choice.textContent = instrument.name;
+            choice.addEventListener("click", () => {
+              const added = stepInstrumentTargetTrackId
+                ? replacePatternInstrument(stepInstrumentTargetTrackId, instrument.id)
+                : addPatternInstrument(instrument.id);
+              if (!added) return;
+              $("#step-instrument-dialog").close();
+              stepInstrumentTargetTrackId = null;
+            });
+            choices.append(choice);
+          });
+        group.append(heading, choices);
+        library.append(group);
+      });
+    $("#step-instrument-title").textContent = targetTrackId ? "Choose a row instrument" : "Choose an instrument";
+    $("#step-instrument-dialog").showModal();
+  }
+
+  function replacePatternInstrument(trackId, sourceId) {
+    const pattern = getPattern();
+    const oldTrack = state.tracks.find((track) => track.id === trackId);
+    const source = state.tracks.find((track) => track.id === sourceId && !track.sourceId && track.kind !== "drumkit");
+    if (!pattern || !oldTrack || !source || oldTrack.kind === "drumkit") return false;
+    if (oldTrack.id === source.id || oldTrack.sourceId === source.id) return true;
+    captureCurrentPattern();
+    pattern.trackIds = getPatternTrackIds(pattern);
+    const rowIndex = pattern.trackIds.indexOf(oldTrack.id);
+    if (rowIndex < 0) return false;
+    const replacement = makePatternInstrumentLayer(source, {
+      name: source.name,
+      cells: oldTrack.cells,
+      volume: oldTrack.volume,
+      muted: oldTrack.muted,
+      solo: oldTrack.solo,
+      pitch: oldTrack.pitch,
+      swing: oldTrack.swing,
+      effects: oldTrack.effects,
+    });
+    state.tracks.push(replacement);
+    pattern.trackIds[rowIndex] = replacement.id;
+    delete pattern.cells[oldTrack.id];
+    delete pattern.variants[oldTrack.id];
+    pattern.cells[replacement.id] = [...replacement.cells];
+    if (SOUND_VARIANTS[replacement.kind]) pattern.variants[replacement.id] = replacement.variant || "classic";
+    state.selectedStepCells.clear();
+    state.selectedPreset = null;
+    const isUsedElsewhere = state.patterns.some((item) => item.id !== pattern.id && getPatternTrackIds(item).includes(oldTrack.id));
+    if (oldTrack.sourceId && !isUsedElsewhere) {
+      disconnectTrackAudio(oldTrack);
+      state.tracks = state.tracks.filter((track) => track !== oldTrack);
+    }
+    renderTracks();
+    renderPatternSelectors();
+    renderPresets();
+    saveState();
+    showToast(`${oldTrack.name} replaced with ${source.name}`);
+    return true;
+  }
+
+  function openStepTrackMix(track) {
+    $("#step-track-mix-title").textContent = `${track.name} mix`;
+    const controls = $("#step-track-mix-controls");
+    controls.replaceChildren();
+    const soundGroup = document.createElement("div");
+    soundGroup.className = "step-mix-group";
+    const soundHeading = document.createElement("h3");
+    soundHeading.textContent = "Sound";
+    soundGroup.append(
+      soundHeading,
+      makeStepTrackMixRange(track, "pitch", "Pitch", -12, 12, 1, " st"),
+      makeStepTrackMixRange(track, "volume", "Volume", 0, 100, 1, "%"),
+      makeStepTrackMixRange(track, "swing", "Swing", 0, 45, 1, "%"),
+    );
+    const eqGroup = document.createElement("div");
+    eqGroup.className = "step-mix-group";
+    const eqHeading = document.createElement("h3");
+    eqHeading.textContent = "3-band EQ";
+    eqGroup.append(
+      eqHeading,
+      makeMixerRange(track, "eqLow", "Low", -12, 12, 1, " dB"),
+      makeMixerRange(track, "eqMid", "Mid", -12, 12, 1, " dB"),
+      makeMixerRange(track, "eqHigh", "High", -12, 12, 1, " dB"),
+    );
+    controls.append(soundGroup, eqGroup);
+    $("#step-track-mix-dialog").showModal();
+  }
+
+  function makeStepTrackMixRange(track, id, label, min, max, step, unit) {
+    const control = document.createElement("label");
+    control.className = "mixer-effect-control step-mix-control";
+    const caption = document.createElement("span");
+    caption.className = "mixer-control-caption";
+    caption.textContent = label;
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(step);
+    const currentValue = id === "volume"
+      ? Math.round(track.volume * 100)
+      : id === "swing" && !Number.isFinite(track.swing) ? state.swing : track[id];
+    input.value = String(currentValue);
+    input.setAttribute("aria-label", `${track.name} ${label}`);
+    const value = document.createElement("output");
+    value.textContent = `${currentValue}${unit}`;
+    input.addEventListener("input", () => {
+      const nextValue = Number(input.value);
+      if (id === "volume") {
+        track.volume = nextValue / 100;
+        updateTrackGains();
+      } else {
+        track[id] = nextValue;
+      }
+      value.textContent = `${input.value}${unit}`;
+      saveState();
+    });
+    control.append(caption, input, value);
+    return control;
   }
 
   function removePatternInstrument(track) {
@@ -1317,7 +1453,16 @@
       const nameText = document.createElement("span");
       nameText.className = "track-name-text";
       nameText.textContent = track.name;
-      name.append(nameText);
+      const chooseInstrument = document.createElement("button");
+      chooseInstrument.className = "track-instrument-picker";
+      chooseInstrument.type = "button";
+      chooseInstrument.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>';
+      chooseInstrument.setAttribute("aria-label", `Choose instrument for ${track.name}`);
+      chooseInstrument.setAttribute("aria-haspopup", "dialog");
+      chooseInstrument.setAttribute("aria-controls", "step-instrument-dialog");
+      chooseInstrument.title = "Choose row instrument";
+      chooseInstrument.addEventListener("click", () => openStepInstrumentPicker(track.id));
+      name.append(nameText, chooseInstrument);
       const liveKey = liveKeys?.get(track.id);
       if (liveKey) {
         const keyHint = document.createElement("kbd");
@@ -1331,8 +1476,6 @@
       subtitle.title = track.sample?.name || track.subtitle;
       subtitle.textContent = track.sample?.name || track.subtitle;
       info.append(name, subtitle);
-      const soundSelect = makeSoundSelect(track);
-      if (soundSelect) info.append(soundSelect);
       const controls = document.createElement("div");
       controls.className = "track-controls";
       controls.append(
@@ -1340,21 +1483,9 @@
         makeTrackButton("solo", "Solo track", track),
         makeTrackButton("sample", track.sample ? "Replace loaded sample" : "Load an audio sample", track),
         makeTrackButton("remove-from-pattern", "Remove instrument from this pattern", track),
+        makeTrackButton("mix", `Open ${track.name} mix`, track),
       );
       if (track.kind === "sample" && !track.sourceId) controls.append(makeTrackButton("remove", "Remove imported drum sound", track));
-      const volume = document.createElement("input");
-      volume.className = "track-volume";
-      volume.type = "range";
-      volume.min = "0";
-      volume.max = "100";
-      volume.value = String(Math.round(track.volume * 100));
-      volume.setAttribute("aria-label", `${track.name} volume`);
-      volume.addEventListener("input", () => {
-        track.volume = Number(volume.value) / 100;
-        updateTrackGains();
-        saveState();
-      });
-      controls.append(volume);
       meta.append(color, info, controls);
 
       const grid = document.createElement("div");
@@ -1406,10 +1537,17 @@
       row.append(meta, grid);
       trackList.append(row);
     });
+    const addInstrument = document.createElement("button");
+    addInstrument.className = "add-step-instrument-row";
+    addInstrument.type = "button";
+    addInstrument.innerHTML = '<span aria-hidden="true">＋</span> Add instrument';
+    addInstrument.setAttribute("aria-haspopup", "dialog");
+    addInstrument.setAttribute("aria-controls", "step-instrument-dialog");
+    addInstrument.addEventListener("click", () => openStepInstrumentPicker());
+    trackList.append(addInstrument);
     $("#track-count").textContent = String(visibleTracks.length).padStart(2, "0");
     if (state.view === "mixer") renderMixer();
     renderInstrumentBrowser();
-    renderPatternInstrumentOptions();
     renderPianoInstrumentOptions();
   }
 
@@ -1441,6 +1579,14 @@
     button.type = "button";
     button.setAttribute("aria-label", label);
     button.setAttribute("title", label);
+    if (type === "mix") {
+      button.classList.add("track-mix-button");
+      button.textContent = "MIX";
+      button.setAttribute("aria-haspopup", "dialog");
+      button.setAttribute("aria-controls", "step-track-mix-dialog");
+      button.addEventListener("click", () => openStepTrackMix(track));
+      return button;
+    }
     if (type === "sample") {
       button.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>';
       button.addEventListener("click", () => {
@@ -1739,7 +1885,7 @@
     const hasSolo = state.tracks.some((item) => item.solo);
     if (!track.muted && (!hasSolo || track.solo)) {
       const time = state.audioContext.currentTime + 0.01;
-      const midi = track.kind === "drumkit" ? 36 : 60 + (keyIndex % 24);
+      const midi = track.kind === "drumkit" ? 36 : 60 + (keyIndex % 24) + (track.kind === "instrument" ? track.pitch || 0 : 0);
       if (track.kind === "instrument" || track.kind === "drumkit") {
         playPianoNote(track, time, midi, getStepDuration(), 0.85);
       } else {
@@ -1823,6 +1969,16 @@
     return getStepDuration();
   }
 
+  function getTrackStepTime(track, step, pattern, time) {
+    const ticksPerStep = getGridTicksPerStep(pattern);
+    const isSwingStep = ticksPerStep === 1
+      ? Math.floor(step / 2) % 2 === 1
+      : ticksPerStep <= 4 && step % 2 === 1;
+    const swingAmount = Number.isFinite(track.swing) ? track.swing : state.swing;
+    const swingDelta = swingAmount - (ticksPerStep <= 2 ? state.swing : 0);
+    return time + (isSwingStep ? getStepDuration() * swingDelta / 100 : 0);
+  }
+
   function scheduleStep(step, time, pattern = null, loopIndex = null, updatePlayhead = true, highlightPlayer = null) {
     const activeTracks = pattern
       ? state.tracks.filter((track) => getPatternTrackIds(pattern).includes(track.id))
@@ -1834,7 +1990,9 @@
       if (cells[step] && !track.muted && (!hasSolo || track.solo)) {
         if (pattern && loopIndex !== null &&
           state.liveRecordedHits.delete(`${pattern.id}:${loopIndex}:${track.id}:${step}`)) return;
-        triggerTrack(track, time, step, variant, getNoteDuration(pattern || getPattern()));
+        const gridPattern = pattern || getPattern();
+        const trackTime = getTrackStepTime(track, step, gridPattern, time);
+        triggerTrack(track, trackTime, step, variant, getNoteDuration(gridPattern));
       }
     });
     if (!updatePlayhead && !highlightPlayer) return;
@@ -2030,7 +2188,8 @@
           const ticksPerGridStep = getGridTicksPerStep(pattern);
           if (clockStep % ticksPerGridStep === 0) {
             const gridStep = Math.floor(clockStep / ticksPerGridStep) % getGridStepCount(pattern);
-            scheduleStep(gridStep, player.nextStepTime, pattern, null, false, player);
+            const swingOffset = Math.floor(clockStep / 2) % 2 === 1 ? getStepDuration() * (state.swing / 100) : 0;
+            scheduleStep(gridStep, player.nextStepTime + swingOffset, pattern, null, false, player);
           }
         }
       } else {
@@ -2099,6 +2258,8 @@
       variant: null,
       muted: options.muted === true,
       solo: options.solo === true,
+      pitch: Number.isFinite(options.pitch) ? Math.max(-12, Math.min(12, options.pitch)) : 0,
+      swing: Number.isFinite(options.swing) ? Math.max(0, Math.min(45, options.swing)) : null,
       sample: options.buffer ? { name: options.fileName || name, buffer: options.buffer } : null,
       gainNode: null,
       effects: makeDefaultEffects(options.effects),
@@ -2119,6 +2280,8 @@
       volume: Number.isFinite(options.volume) ? Math.max(0, Math.min(1, options.volume)) : source.volume,
       muted: options.muted === true,
       solo: options.solo === true,
+      pitch: Number.isFinite(options.pitch) ? Math.max(-12, Math.min(12, options.pitch)) : source.pitch || 0,
+      swing: Number.isFinite(options.swing) ? Math.max(0, Math.min(45, options.swing)) : source.swing ?? null,
       variant: options.variant ?? source.variant,
       sample: source.sample ? { ...source.sample } : null,
       gainNode: null,
@@ -3722,7 +3885,7 @@
       $("#sequencer-actions").append(patternDragSource, addPatternButton);
     } else {
       const arrangementActions = $("#arrangement-actions");
-      arrangementActions.insertBefore(patternDragSource, $("#pattern-instrument-select").parentElement);
+      arrangementActions.insertBefore(patternDragSource, $("#new-pattern-button"));
       arrangementActions.insertBefore(addPatternButton, $("#record-audio-button"));
     }
     $("#arrangement-heading").hidden = showSequencer || showPianoRoll;
@@ -4004,6 +4167,8 @@
         volume: track.volume,
         muted: track.muted,
         solo: track.solo,
+        pitch: track.pitch || 0,
+        swing: Number.isFinite(track.swing) ? track.swing : null,
         cells: track.cells,
         blob: file,
       });
@@ -4067,6 +4232,8 @@
               volume: record.volume,
               muted: record.muted,
               solo: record.solo,
+              pitch: record.pitch,
+              swing: record.swing,
               cells: record.cells,
               buffer,
             });
@@ -4144,32 +4311,34 @@
 
   function triggerTrack(track, time, step, variant = track.variant, noteDuration = getStepDuration(), outputTrack = track) {
     const context = state.audioContext;
+    const pitchRatio = Math.pow(2, (track.pitch || 0) / 12);
     ensureTrackAudio(outputTrack);
     const output = outputTrack.gainNode;
     if (track.sample) {
       const source = context.createBufferSource();
       source.buffer = track.sample.buffer;
       const envelope = context.createGain();
+      source.playbackRate.setValueAtTime(pitchRatio, time);
       envelope.gain.setValueAtTime(1, time);
-      const duration = Math.max(0.005, Math.min(track.sample.buffer.duration, noteDuration));
+      const duration = Math.max(0.005, Math.min(track.sample.buffer.duration / pitchRatio, noteDuration));
       const fade = Math.min(0.01, duration * 0.1);
       envelope.gain.setValueAtTime(1, time + Math.max(0, duration - fade));
       envelope.gain.linearRampToValueAtTime(0.0001, time + duration);
       source.connect(envelope);
       envelope.connect(output);
-      source.start(time, 0, duration);
+      source.start(time, 0, Math.min(track.sample.buffer.duration, duration * pitchRatio));
       return;
     }
     const durationScale = noteDuration / getStepDuration();
     switch (track.kind) {
-      case "kick": playKick(context, output, time, step, variant, durationScale); break;
-      case "snare": playSnare(context, output, time, variant, durationScale); break;
-      case "clap": playClap(context, output, time, variant, durationScale); break;
-      case "hat": playHat(context, output, time, false, variant, durationScale); break;
-      case "openhat": playHat(context, output, time, true, variant, durationScale); break;
-      case "rim": playRim(context, output, time, variant, durationScale); break;
+      case "kick": playKick(context, output, time, step, variant, durationScale, pitchRatio); break;
+      case "snare": playSnare(context, output, time, variant, durationScale, pitchRatio); break;
+      case "clap": playClap(context, output, time, variant, durationScale, pitchRatio); break;
+      case "hat": playHat(context, output, time, false, variant, durationScale, pitchRatio); break;
+      case "openhat": playHat(context, output, time, true, variant, durationScale, pitchRatio); break;
+      case "rim": playRim(context, output, time, variant, durationScale, pitchRatio); break;
       case "drumkit": playDrumKitNote(track, time, 36, noteDuration, 0.8, outputTrack); break;
-      case "instrument": playInstrumentVoice(track, time, 60, noteDuration, 0.8, outputTrack); break;
+      case "instrument": playInstrumentVoice(track, time, 60 + (track.pitch || 0), noteDuration, 0.8, outputTrack); break;
       default: break;
     }
   }
@@ -4347,7 +4516,7 @@
     oscillator.stop(time + duration + 0.02);
   }
 
-  function playKick(context, output, time, step, variant, durationScale) {
+  function playKick(context, output, time, step, variant, durationScale, pitchRatio = 1) {
     const osc = context.createOscillator();
     const envelope = context.createGain();
     const settings = {
@@ -4358,10 +4527,10 @@
       industrial: [120, 27, 0.4],
     }[variant] || [148, 43, 0.36];
     const duration = settings[2] * durationScale;
-    const pitch = settings[0] * (step % 8 === 0 ? 1 : 0.88);
+    const pitch = settings[0] * (step % 8 === 0 ? 1 : 0.88) * pitchRatio;
     osc.type = "sine";
     osc.frequency.setValueAtTime(pitch, time);
-    osc.frequency.exponentialRampToValueAtTime(settings[1], time + duration * 0.38);
+    osc.frequency.exponentialRampToValueAtTime(settings[1] * pitchRatio, time + duration * 0.38);
     envelope.gain.setValueAtTime(0.0001, time);
     envelope.gain.exponentialRampToValueAtTime(1, time + 0.004);
     envelope.gain.exponentialRampToValueAtTime(0.0001, time + duration);
@@ -4389,7 +4558,7 @@
     source.stop(time + duration + 0.015);
   }
 
-  function playSnare(context, output, time, variant, durationScale) {
+  function playSnare(context, output, time, variant, durationScale, pitchRatio = 1) {
     const settings = {
       classic: [0.17, 1500, 0.36, 185, 0.1],
       tight: [0.1, 2300, 0.32, 235, 0.075],
@@ -4397,11 +4566,11 @@
       body: [0.2, 1250, 0.34, 125, 0.18],
       metal: [0.17, 4100, 0.4, 330, 0.085],
     }[variant] || [0.17, 1500, 0.36, 185, 0.1];
-    playNoise(context, output, time, settings[0] * durationScale, settings[1], settings[2]);
+    playNoise(context, output, time, settings[0] * durationScale, settings[1] * pitchRatio, settings[2]);
     const body = context.createOscillator();
     const envelope = context.createGain();
     body.type = "triangle";
-    body.frequency.setValueAtTime(settings[3], time);
+    body.frequency.setValueAtTime(settings[3] * pitchRatio, time);
     envelope.gain.setValueAtTime(0.2, time);
     envelope.gain.exponentialRampToValueAtTime(0.0001, time + settings[4] * durationScale);
     body.connect(envelope);
@@ -4410,7 +4579,7 @@
     body.stop(time + settings[4] * durationScale + 0.02);
   }
 
-  function playClap(context, output, time, variant, durationScale) {
+  function playClap(context, output, time, variant, durationScale, pitchRatio = 1) {
     const settings = {
       classic: [[0, 0.018, 0.038], 0.17, 1100, 0.28],
       tight: [[0, 0.012], 0.1, 1500, 0.27],
@@ -4419,24 +4588,24 @@
     }[variant] || [[0, 0.018, 0.038], 0.17, 1100, 0.28];
     settings[0].forEach((offset, index) => {
       const last = index === settings[0].length - 1;
-      playNoise(context, output, time + offset * durationScale, (last ? settings[1] : 0.045) * durationScale, settings[2], last ? settings[3] : 0.2);
+      playNoise(context, output, time + offset * durationScale, (last ? settings[1] : 0.045) * durationScale, settings[2] * pitchRatio, last ? settings[3] : 0.2);
     });
   }
 
-  function playHat(context, output, time, open, variant, durationScale) {
+  function playHat(context, output, time, open, variant, durationScale, pitchRatio = 1) {
     const settings = open
       ? ({ classic: [0.34, 6500, 0.2], shimmer: [0.48, 9000, 0.22], dark: [0.3, 3800, 0.25], wash: [0.7, 5200, 0.3] }[variant] || [0.34, 6500, 0.2])
       : ({ classic: [0.055, 6500, 0.16], soft: [0.07, 4300, 0.12], bright: [0.045, 10000, 0.2], vinyl: [0.09, 3200, 0.18] }[variant] || [0.055, 6500, 0.16]);
-    playNoise(context, output, time, settings[0] * durationScale, settings[1], settings[2], 0.55);
+    playNoise(context, output, time, settings[0] * durationScale, settings[1] * pitchRatio, settings[2], 0.55);
   }
 
-  function playRim(context, output, time, variant, durationScale) {
+  function playRim(context, output, time, variant, durationScale, pitchRatio = 1) {
     const osc = context.createOscillator();
     const envelope = context.createGain();
     osc.type = "triangle";
     const pitch = { classic: [880, 420], low: [190, 110], high: [1450, 720], wood: [560, 250] }[variant] || [880, 420];
-    osc.frequency.setValueAtTime(pitch[0], time);
-    osc.frequency.exponentialRampToValueAtTime(pitch[1], time + 0.045 * durationScale);
+    osc.frequency.setValueAtTime(pitch[0] * pitchRatio, time);
+    osc.frequency.exponentialRampToValueAtTime(pitch[1] * pitchRatio, time + 0.045 * durationScale);
     envelope.gain.setValueAtTime(0.32, time);
     envelope.gain.exponentialRampToValueAtTime(0.0001, time + 0.075 * durationScale);
     osc.connect(envelope);
@@ -4694,6 +4863,8 @@
         muted: track.muted,
         solo: track.solo,
         variant: track.variant,
+        pitch: track.pitch || 0,
+        swing: Number.isFinite(track.swing) ? track.swing : null,
         effects: makeDefaultEffects(track.effects),
         sampleName: track.sample?.name || null,
       })),
@@ -4914,6 +5085,8 @@
                 volume: savedTrack.volume,
                 muted: savedTrack.muted,
                 solo: savedTrack.solo,
+                pitch: savedTrack.pitch,
+                swing: savedTrack.swing,
                 variant: savedTrack.variant,
                 effects: savedTrack.effects,
               });
@@ -4928,6 +5101,8 @@
               volume: savedTrack.volume,
               muted: savedTrack.muted,
               solo: savedTrack.solo,
+              pitch: savedTrack.pitch,
+              swing: savedTrack.swing,
               cells: savedTrack.cells,
               effects: savedTrack.effects,
             });
@@ -4938,6 +5113,8 @@
             track.cells = Array.from({ length: STEP_COUNT }, (_, index) => savedTrack.cells[index] === true);
           }
           if (Number.isFinite(savedTrack.volume)) track.volume = Math.max(0, Math.min(1, savedTrack.volume));
+          if (Number.isFinite(savedTrack.pitch)) track.pitch = Math.max(-12, Math.min(12, savedTrack.pitch));
+          if (Number.isFinite(savedTrack.swing)) track.swing = Math.max(0, Math.min(45, savedTrack.swing));
           track.effects = makeDefaultEffects(savedTrack.effects);
           if (SOUND_VARIANTS[track.kind]?.some((sound) => sound.id === savedTrack.variant)) track.variant = savedTrack.variant;
           track.muted = savedTrack.muted === true;
@@ -5218,7 +5395,8 @@
           if (time >= duration) continue;
           patternTracks.forEach((track) => {
             if (pattern.cells[track.id]?.[patternStep] && !track.muted && (!hasSolo || track.solo)) {
-              triggerTrack(track, time, patternStep, pattern.variants[track.id] || track.variant, getNoteDuration(pattern));
+              const trackTime = getTrackStepTime(track, patternStep, pattern, time);
+              triggerTrack(track, trackTime, patternStep, pattern.variants[track.id] || track.variant, getNoteDuration(pattern));
             }
           });
         }
@@ -5529,18 +5707,18 @@
       event.dataTransfer.effectAllowed = "copy";
     });
     $("#sequencer-browser-button").addEventListener("click", () => $("#source-browser-dialog").showModal());
+    $("#step-instrument-close").addEventListener("click", () => $("#step-instrument-dialog").close());
+    $("#step-instrument-dialog").addEventListener("close", () => { stepInstrumentTargetTrackId = null; });
+    $("#step-instrument-dialog").addEventListener("click", (event) => {
+      if (event.target === $("#step-instrument-dialog")) $("#step-instrument-dialog").close();
+    });
+    $("#step-track-mix-close").addEventListener("click", () => $("#step-track-mix-dialog").close());
+    $("#step-track-mix-dialog").addEventListener("click", (event) => {
+      if (event.target === $("#step-track-mix-dialog")) $("#step-track-mix-dialog").close();
+    });
     $("#new-pattern-button").addEventListener("click", createPattern);
     $("#new-pattern-sequencer-button").addEventListener("click", createPattern);
     $("#add-pattern-button").addEventListener("click", () => addPatternClip());
-    [
-      ["#sequencer-instrument-select", "#add-sequencer-instrument-button"],
-      ["#pattern-instrument-select", "#add-pattern-instrument-button"],
-    ].forEach(([selectSelector, buttonSelector]) => {
-      $(buttonSelector).addEventListener("click", () => {
-        const select = $(selectSelector);
-        if (select.value) addPatternInstrument(select.value);
-      });
-    });
     $("#source-browser-button").addEventListener("click", () => $("#source-browser-dialog").showModal());
     $("#source-browser-close").addEventListener("click", () => $("#source-browser-dialog").close());
     $("#import-recording-button").addEventListener("click", () => requestRecordingImport());

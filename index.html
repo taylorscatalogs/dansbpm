@@ -110,11 +110,6 @@
               </label>
               <button class="quiet-button" id="rename-pattern-button" type="button">Rename</button>
               <button class="quiet-button pattern-drag-source" id="pattern-drag-source" type="button" draggable="true">Drag pattern to timeline</button>
-              <label class="pattern-select-control pattern-instrument-control">
-                <span>INSTRUMENT</span>
-                <select id="pattern-instrument-select" aria-label="Add an instrument to this pattern"></select>
-              </label>
-              <button class="quiet-button add-pattern-instrument-button" id="add-pattern-instrument-button" type="button" aria-label="Add instrument to selected pattern">＋</button>
               <button class="quiet-button" id="new-pattern-button" type="button">＋ New pattern</button>
               <button class="quiet-button add-pattern-button" id="add-pattern-button" type="button">Add to song</button>
               <button class="quiet-button record-audio-button" id="record-audio-button" type="button" aria-pressed="false">
@@ -174,11 +169,6 @@
                           <button class="quiet-button keyboard-record-button" id="step-keyboard-record-button" type="button" aria-pressed="false">Record keys</button>
                           <button class="quiet-button" id="rename-pattern-sequencer-button" type="button">Rename</button>
                           <button class="quiet-button" id="sequencer-browser-button" type="button">Browser</button>
-                          <label class="pattern-select-control pattern-instrument-control">
-                            <span>INSTRUMENT</span>
-                            <select id="sequencer-instrument-select" aria-label="Add an instrument layer to this pattern"></select>
-                          </label>
-                          <button class="quiet-button add-pattern-instrument-button" id="add-sequencer-instrument-button" type="button" aria-label="Add instrument layer to selected pattern">＋</button>
                           <button class="quiet-button" id="new-pattern-sequencer-button" type="button">＋ New</button>
                           <button class="quiet-button" id="clear-button" type="button">
                             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 6h11m-9.5 0 .6 10h5.8l.6-10M8 6V4h4v2m-3 3v4m2-4v4" /></svg>
@@ -327,6 +317,26 @@
             <button class="source-add-button" id="side-add-recording" type="button">＋ Import audio</button>
           </aside>
         </dialog>
+        <dialog class="step-instrument-dialog" id="step-instrument-dialog" aria-labelledby="step-instrument-title">
+          <div class="step-dialog-heading">
+            <div>
+              <div class="eyebrow">SOUND LIBRARY</div>
+              <h2 id="step-instrument-title">Choose an instrument</h2>
+            </div>
+            <button class="dialog-close" id="step-instrument-close" type="button" aria-label="Close instrument picker">×</button>
+          </div>
+          <div class="step-instrument-library" id="step-instrument-library"></div>
+        </dialog>
+        <dialog class="step-track-mix-dialog" id="step-track-mix-dialog" aria-labelledby="step-track-mix-title">
+          <div class="step-dialog-heading">
+            <div>
+              <div class="eyebrow">STEP ROW MIX</div>
+              <h2 id="step-track-mix-title">Row mix</h2>
+            </div>
+            <button class="dialog-close" id="step-track-mix-close" type="button" aria-label="Close row mixer">×</button>
+          </div>
+          <div id="step-track-mix-controls"></div>
+        </dialog>
       </main>
       <input id="sample-input" type="file" accept="audio/*" hidden />
       <input id="drum-samples-input" type="file" accept="audio/*" multiple hidden />
@@ -338,7 +348,8 @@
           <div class="eyebrow">QUICK HELP</div>
           <h2>Your first groove</h2>
           <p>Click squares to switch drum hits on or off. Press <kbd>Space</kbd> to play, then change the tempo or swing while it runs.</p>
-          <p>Use the <strong>+</strong> next to a drum to replace its sample, or open <strong>Browser → Import drum sounds</strong> to add multiple samples as new sequencer tracks.</p>
+          <p>Use the <strong>+</strong> next to a row to load or replace its sample. Choose a row instrument with the arrow beside its name; use <strong>Add instrument</strong> below the rows to add an empty row. Each row’s <strong>MIX</strong> menu adjusts pitch, volume, swing, and EQ. Drum kits are available in Piano Roll, not Step.</p>
+          <p>Open <strong>Browser → Import drum sounds</strong> to add multiple samples as new sequencer rows.</p>
           <p>Use the top-bar <strong>Step</strong> and <strong>Piano Roll</strong> buttons to open either editor in the workspace. In the piano roll, choose an instrument, click to add notes, and drag notes or their edges to edit them.</p>
           <p><strong>Keyboard shortcuts</strong> (use <kbd>⌘</kbd> instead of <kbd>Ctrl</kbd> on Mac): <kbd>Space</kbd> play/stop; <kbd>Ctrl</kbd> + <kbd>A</kbd> select all in the active editor; <kbd>Ctrl</kbd> + <kbd>C</kbd>/<kbd>V</kbd> copy/paste selected Piano Roll notes or Track View clips; <kbd>Ctrl</kbd> + <kbd>X</kbd> cut them; <kbd>Delete</kbd>/<kbd>Backspace</kbd> remove selected notes or clips.</p>
           <p>In <strong>Step</strong>, <kbd>Shift</kbd>-click cells to select them, then <kbd>Delete</kbd> to clear the selected hits. In <strong>Piano Roll</strong> and <strong>Track View</strong>, <kbd>Alt</kbd>/<kbd>Option</kbd>-drag a marquee to deselect items inside it; <kbd>Shift</kbd>-drag adds to the selection. Piano Roll arrow keys move selected notes by one snap step or semitone; <kbd>Shift</kbd> + <kbd>←</kbd>/<kbd>→</kbd> changes note length by one snap step; <kbd>Ctrl</kbd> + <kbd>↑</kbd>/<kbd>↓</kbd> moves notes by an octave. In Track View, <kbd>←</kbd>/<kbd>→</kbd> nudges selected clips by one bar.</p>
