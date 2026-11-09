@@ -322,6 +322,7 @@
     selectedMixerTrackId: null,
     selectedMixerEffectId: null,
     arrangementDrag: null,
+    mixerMeterAnimation: null,
     mixerEffectAnimation: null,
     mixerEffectDialogTrackId: null,
     clipboard: null,
@@ -3282,6 +3283,7 @@
       empty.className = "mixer-empty";
       empty.textContent = "No tracks in Track View yet. Add a pattern, Mel, or recording to get started.";
       root.append(empty);
+      syncMixerMeters();
       return;
     }
     if (!channels.some(({ track }) => track.id === state.selectedMixerTrackId)) {
@@ -3303,7 +3305,7 @@
         selectArrangementTrack(track.id);
         renderMixer();
       });
-      row.append(title, makeMixerVolumeKnob(track));
+      row.append(title, makeMixerVolumeMonitor(track), makeMixerVolumeKnob(track));
       const effectTarget = document.createElement("div");
       effectTarget.className = "mixer-track-effects";
       effectTarget.setAttribute("aria-label", `${track.name} effects; drop effects here`);
@@ -3353,6 +3355,81 @@
     });
     library.append(libraryTitle, libraryHint, effectList);
     root.append(trackList, library);
+    syncMixerMeters();
+  }
+
+  function makeMixerVolumeMonitor(track) {
+    const meter = document.createElement("div");
+    meter.className = "mixer-volume-monitor";
+    meter.dataset.trackId = track.id;
+    meter.dataset.level = "0";
+    meter.setAttribute("role", "meter");
+    meter.setAttribute("aria-label", `${track.name} active volume`);
+    meter.setAttribute("aria-valuemin", "0");
+    meter.setAttribute("aria-valuemax", "100");
+    meter.setAttribute("aria-valuenow", "0");
+    const fill = document.createElement("span");
+    fill.className = "mixer-volume-monitor-fill";
+    meter.append(fill);
+    return meter;
+  }
+
+  function syncMixerMeters() {
+    if (state.mixerMeterAnimation !== null) {
+      cancelAnimationFrame(state.mixerMeterAnimation);
+      state.mixerMeterAnimation = null;
+    }
+    const tracksById = new Map(getMixerTracks().map(({ track }) => [track.id, track]));
+    const meters = Array.from(document.querySelectorAll(".mixer-volume-monitor"), (meter) => ({
+      element: meter,
+      fill: meter.querySelector(".mixer-volume-monitor-fill"),
+      track: tracksById.get(meter.dataset.trackId),
+      samples: null,
+    }));
+    const resetMeters = () => meters.forEach(({ element, fill }) => {
+      element.dataset.level = "0";
+      element.setAttribute("aria-valuenow", "0");
+      if (fill) fill.style.width = "0%";
+    });
+    if (state.view !== "mixer" || !state.isPlaying || state.playbackMode !== "arrangement") {
+      resetMeters();
+      return;
+    }
+    const draw = () => {
+      if (state.view !== "mixer" || !state.isPlaying || state.playbackMode !== "arrangement") {
+        resetMeters();
+        state.mixerMeterAnimation = null;
+        return;
+      }
+      meters.forEach((meter) => {
+        const analyser = meter.track?.analyser;
+        let target = 0;
+        if (analyser) {
+          if (!meter.samples || meter.samples.length !== analyser.fftSize) {
+            meter.samples = new Uint8Array(analyser.fftSize);
+          }
+          analyser.getByteTimeDomainData(meter.samples);
+          const sumSquares = meter.samples.reduce((sum, sample) => {
+            const amplitude = (sample - 128) / 128;
+            return sum + amplitude * amplitude;
+          }, 0);
+          const rms = Math.sqrt(sumSquares / meter.samples.length);
+          if (rms > 0) {
+            const decibels = 20 * Math.log10(rms);
+            target = Math.max(0, Math.min(100, (decibels + 60) / 60 * 100));
+          }
+        }
+        const previous = Number(meter.element.dataset.level) || 0;
+        const level = target >= previous
+          ? previous + (target - previous) * 0.65
+          : Math.max(target, previous - 2.5);
+        meter.element.dataset.level = String(level);
+        meter.element.setAttribute("aria-valuenow", String(Math.round(level)));
+        if (meter.fill) meter.fill.style.width = `${level}%`;
+      });
+      state.mixerMeterAnimation = requestAnimationFrame(draw);
+    };
+    draw();
   }
 
   function makeMixerVolumeKnob(track) {
@@ -5896,6 +5973,7 @@
       if (arrangementPlayback) scheduleArrangementClips(state.playbackStartTime, startBar);
       scheduler();
       state.schedulerId = window.setInterval(scheduler, 25);
+      syncMixerMeters();
       playButton.classList.toggle("is-playing", arrangementPlayback);
       playButton.setAttribute("aria-label", arrangementPlayback ? "Pause Track View" : "Play Track View");
       $("#now-playing").classList.add("is-live");
@@ -5974,6 +6052,7 @@
     if (stoppedRecording?.mode === "sequencer") renderTracks();
     state.isPlaying = false;
     state.playbackMode = "arrangement";
+    syncMixerMeters();
     state.stepIndex = 0;
     state.stepTimers.forEach((timerId) => window.clearTimeout(timerId));
     state.stepTimers.clear();
