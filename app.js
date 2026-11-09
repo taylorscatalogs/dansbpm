@@ -693,11 +693,21 @@
     const preview = document.createElement("div");
     preview.className = "step-piano-preview";
     preview.setAttribute("aria-hidden", "true");
-    const totalTicks = pattern.steps * 2;
+    grid.append(preview);
+    const cells = [...grid.querySelectorAll(".step-cell")];
+    const previewBounds = preview.getBoundingClientRect();
+    const ticksPerStep = getGridTicksPerStep(pattern);
+    const tickToX = (tick) => {
+      const step = Math.min(cells.length - 1, Math.max(0, Math.floor(tick / ticksPerStep)));
+      const fraction = Math.min(1, Math.max(0, tick / ticksPerStep - step));
+      const cellBounds = cells[step].getBoundingClientRect();
+      const nextX = cells[step + 1]?.getBoundingClientRect().left ?? cellBounds.right;
+      return cellBounds.left - previewBounds.left + (nextX - cellBounds.left) * fraction;
+    };
     for (let bar = 1; bar < pattern.steps / 16; bar += 1) {
       const line = document.createElement("span");
       line.className = "step-piano-preview-bar";
-      line.style.left = `${bar * 32 / totalTicks * 100}%`;
+      line.style.left = `${tickToX(bar * 32)}px`;
       preview.append(line);
     }
     notes.forEach((note) => {
@@ -705,12 +715,12 @@
       const midiRange = PIANO_TOP_MIDI - PIANO_BOTTOM_MIDI;
       const pitch = Math.max(PIANO_BOTTOM_MIDI, Math.min(PIANO_TOP_MIDI, note.midi));
       item.className = "step-piano-preview-note";
-      item.style.left = `${note.startTick / totalTicks * 100}%`;
-      item.style.width = `${note.durationTicks / totalTicks * 100}%`;
+      const left = tickToX(note.startTick);
+      item.style.left = `${left}px`;
+      item.style.width = `${Math.max(2, tickToX(note.startTick + note.durationTicks) - left)}px`;
       item.style.top = `${(PIANO_TOP_MIDI - pitch) / (midiRange + 1) * 100}%`;
       preview.append(item);
     });
-    grid.append(preview);
   }
 
   function setArrangementScale(scale) {
@@ -2158,8 +2168,8 @@
         grid.append(cell);
       }
       row.append(meta, grid);
-      renderStepPianoPreview(row, getPattern(), track);
       trackList.append(row);
+      renderStepPianoPreview(row, getPattern(), track);
     });
     const addInstrument = document.createElement("button");
     addInstrument.className = "add-step-instrument-row";
