@@ -2419,18 +2419,28 @@
   }
 
   function getMixerTracks() {
-    const activeInstrumentIds = new Set([
-      state.selectedPianoTrackId,
-      ...state.patterns.flatMap((pattern) => getPatternTrackIds(pattern)),
-      ...state.pianoNotes.map((note) => note.trackId),
-      ...state.mels.map((mel) => mel.instrumentId),
-      ...state.melTracks.map((track) => track.instrumentId),
+    const activePatternIds = new Set([
+      state.selectedPatternId,
+      ...state.patternClips.map((clip) => clip.patternId),
     ]);
+    const activeTrackIds = new Set();
+    state.patterns.forEach((pattern) => {
+      if (!activePatternIds.has(pattern.id)) return;
+      getPatternTrackIds(pattern).forEach((trackId) => {
+        if (pattern.cells?.[trackId]?.some(Boolean)) activeTrackIds.add(trackId);
+      });
+    });
+    state.pianoNotes.forEach((note) => activeTrackIds.add(note.trackId || state.selectedPianoTrackId));
+    state.mels.forEach((mel) => {
+      if (mel.notes.length) activeTrackIds.add(mel.instrumentId);
+    });
     return [
-      ...state.tracks.filter((track) => !track.libraryOnly || activeInstrumentIds.has(track.id))
+      ...state.tracks.filter((track) => activeTrackIds.has(track.id))
         .map((track) => ({ track, type: "Step / instrument" })),
-      ...state.melTracks.map((track) => ({ track, type: "Mel" })),
-      ...state.arrangementTracks.map((track) => ({ track, type: "Audio" })),
+      ...state.melTracks.filter((track) => track.clips.length)
+        .map((track) => ({ track, type: "Mel" })),
+      ...state.arrangementTracks.filter((track) => track.clips.length)
+        .map((track) => ({ track, type: "Audio" })),
     ];
   }
 
@@ -2444,7 +2454,7 @@
     if (!channels.length) {
       const empty = document.createElement("p");
       empty.className = "mixer-empty";
-      empty.textContent = "Add an instrument or track to start mixing.";
+      empty.textContent = "No tracks with content yet. Add steps, notes, or clips to see them here.";
       root.append(empty);
       return;
     }
