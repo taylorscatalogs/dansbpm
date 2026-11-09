@@ -269,6 +269,9 @@
   const STORAGE_KEY = "pulsegrid-session-v1";
   const PROJECTS_KEY = `${STORAGE_KEY}-projects`;
   const PROJECT_STORAGE_PREFIX = `${STORAGE_KEY}-project-`;
+  const ACTIVE_USER_KEY = `${STORAGE_KEY}-active-user`;
+  const OPEN_PROJECTS_KEY = `${STORAGE_KEY}-open-projects`;
+  const PROJECT_USERS = ["taylor", "guest"];
   const MAX_PATTERN_BARS = 32;
   const MAX_PATTERN_STEPS = MAX_PATTERN_BARS * 16;
   const STEP_COUNT = MAX_PATTERN_BARS * 32;
@@ -330,6 +333,8 @@
     projectId: "default",
     projectName: "Untitled session",
     projects: [],
+    currentUser: null,
+    activeProjectIds: {},
     suppressArrangementClick: false,
     pianoSelectionFromMarquee: false,
     arrangementSelectionFromMarquee: false,
@@ -6156,11 +6161,39 @@
     return `${PROJECT_STORAGE_PREFIX}${projectId}`;
   }
 
+  function getCurrentUserProjects() {
+    return state.projects.filter((project) => project.ownerId === state.currentUser);
+  }
+
+  function getSessionUser() {
+    try {
+      const userId = window.sessionStorage.getItem(ACTIVE_USER_KEY);
+      return PROJECT_USERS.includes(userId) ? userId : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function selectUser(userId) {
+    try {
+      window.sessionStorage.setItem(ACTIVE_USER_KEY, userId);
+      window.sessionStorage.setItem(OPEN_PROJECTS_KEY, "true");
+      window.location.reload();
+    } catch (error) {
+      try { window.sessionStorage.removeItem(ACTIVE_USER_KEY); } catch { /* Session storage may be unavailable. */ }
+      $("#login-error").textContent = `Could not start this profile: ${error.message || "session storage is unavailable"}`;
+    }
+  }
+
   function writeProjectCatalog() {
+    const activeProjectIds = { ...state.activeProjectIds };
+    if (state.currentUser && state.projectId) activeProjectIds[state.currentUser] = state.projectId;
     window.localStorage.setItem(PROJECTS_KEY, JSON.stringify({
       activeProjectId: state.projectId,
+      activeProjectIds,
       projects: state.projects,
     }));
+    state.activeProjectIds = activeProjectIds;
   }
 
   function updateProjectNameLabel() {
@@ -6170,29 +6203,62 @@
   function initializeProjects() {
     try {
       const savedCatalog = JSON.parse(window.localStorage.getItem(PROJECTS_KEY) || "null");
-      const projects = Array.isArray(savedCatalog?.projects)
+      let projects = Array.isArray(savedCatalog?.projects)
         ? savedCatalog.projects.filter((project) => typeof project?.id === "string" && typeof project.name === "string")
         : [];
-      if (projects.length) {
-        state.projects = projects;
-        state.projectId = projects.some((project) => project.id === savedCatalog.activeProjectId)
-          ? savedCatalog.activeProjectId
-          : projects[0].id;
-      } else {
+      projects = projects.map((project) => ({
+        ...project,
+        ownerId: PROJECT_USERS.includes(project.ownerId) ? project.ownerId : "taylor",
+      }));
+      state.activeProjectIds = savedCatalog?.activeProjectIds && typeof savedCatalog.activeProjectIds === "object"
+        ? { ...savedCatalog.activeProjectIds }
+        : {};
+
+      if (!projects.length) {
         const name = window.localStorage.getItem(`${STORAGE_KEY}-name`)?.trim() || "Untitled session";
-        const project = { id: "default", name, updatedAt: Date.now() };
         const oldSnapshot = window.localStorage.getItem(STORAGE_KEY);
-        if (oldSnapshot) window.localStorage.setItem(getProjectStorageKey(project.id), oldSnapshot);
-        state.projects = [project];
-        state.projectId = project.id;
+        if (oldSnapshot || name !== "Untitled session") {
+          projects = [{ id: "default", name, ownerId: "taylor", updatedAt: Date.now() }];
+          if (oldSnapshot) window.localStorage.setItem(getProjectStorageKey("default"), oldSnapshot);
+        }
+      }
+
+      state.projects = projects;
+      if (state.currentUser) {
+        let userProjects = getCurrentUserProjects();
+        if (!userProjects.length) {
+          const project = {
+            id: makeId(),
+            name: "Untitled session",
+            ownerId: state.currentUser,
+            updatedAt: Date.now(),
+          };
+          state.projects.unshift(project);
+          userProjects = [project];
+        }
+        const preferredProjectId = state.activeProjectIds[state.currentUser] ||
+          (savedCatalog?.activeProjectId && userProjects.some((project) => project.id === savedCatalog.activeProjectId)
+            ? savedCatalog.activeProjectId
+            : null);
+        state.projectId = userProjects.some((project) => project.id === preferredProjectId)
+          ? preferredProjectId
+          : userProjects[0].id;
+        state.activeProjectIds[state.currentUser] = state.projectId;
         writeProjectCatalog();
+      } else {
+        state.projectId = "";
       }
       const activeProject = state.projects.find((project) => project.id === state.projectId);
       state.projectName = activeProject?.name || "Untitled session";
       updateProjectNameLabel();
     } catch (error) {
-      state.projects = [{ id: "default", name: "Untitled session", updatedAt: 0 }];
-      state.projectId = "default";
+      state.projects = [{
+        id: "default",
+        name: "Untitled session",
+        ownerId: state.currentUser || "taylor",
+        updatedAt: 0,
+      }];
+      state.projectId = state.currentUser ? "default" : "";
       state.projectName = "Untitled session";
       updateProjectNameLabel();
       showToast(`Project storage is unavailable: ${error.message || "could not load projects"}`);
@@ -6294,6 +6360,8 @@
   }
 
   function persistStateSnapshot(snapshot, projectId = state.projectId) {
+    if (!state.currentUser || !state.projects.some((project) =>
+      project.id === projectId && project.ownerId === state.currentUser)) return false;
     try {
       window.localStorage.setItem(getProjectStorageKey(projectId), JSON.stringify(snapshot));
     } catch {
@@ -6318,10 +6386,12 @@
   function flushSaveState() {
     window.clearTimeout(saveState.timeout);
     saveState.timeout = null;
+    if (!state.currentUser) return false;
     return persistStateSnapshot(createStateSnapshot(), state.projectId);
   }
 
   function saveState() {
+    if (!state.currentUser) return;
     const saveDot = $(".save-dot");
     $("#save-state").textContent = "Saving…";
     saveDot.style.background = "#c8a95a";
@@ -6336,7 +6406,7 @@
   function renderProjectList() {
     const list = $("#project-list");
     list.replaceChildren();
-    state.projects.forEach((project) => {
+    getCurrentUserProjects().forEach((project) => {
       const button = document.createElement("button");
       button.className = `project-list-item${project.id === state.projectId ? " is-current" : ""}`;
       button.type = "button";
@@ -6356,7 +6426,8 @@
   }
 
   function switchProject(projectId) {
-    if (projectId === state.projectId || !state.projects.some((project) => project.id === projectId)) return;
+    if (projectId === state.projectId || !state.projects.some((project) =>
+      project.id === projectId && project.ownerId === state.currentUser)) return;
     if (state.mediaRecorder?.state === "recording") {
       showToast("Stop audio recording before switching projects.");
       return;
@@ -6379,6 +6450,7 @@
   }
 
   function createProject() {
+    if (!state.currentUser) return;
     if (state.mediaRecorder?.state === "recording") {
       showToast("Stop audio recording before creating a project.");
       return;
@@ -6390,7 +6462,8 @@
     stopAllWorkspacePlayers();
     const project = {
       id: makeId(),
-      name: `New Project ${state.projects.length + 1}`,
+      name: `New Project ${getCurrentUserProjects().length + 1}`,
+      ownerId: state.currentUser,
       updatedAt: 0,
     };
     const previousProjectId = state.projectId;
@@ -6433,6 +6506,26 @@
       showToast(`${state.projectName} saved`);
     } else {
       showToast("Could not save this project.");
+    }
+  }
+
+  function switchUser() {
+    if (state.mediaRecorder?.state === "recording") {
+      showToast("Stop audio recording before switching users.");
+      return;
+    }
+    if (!flushSaveState()) {
+      showToast("Could not save this project; switching users was cancelled.");
+      return;
+    }
+    if (state.isPlaying) stopPlayback();
+    stopAllWorkspacePlayers();
+    try {
+      window.sessionStorage.removeItem(ACTIVE_USER_KEY);
+      window.sessionStorage.removeItem(OPEN_PROJECTS_KEY);
+      window.location.reload();
+    } catch (error) {
+      showToast(`Could not switch users: ${error.message || "session storage is unavailable"}`);
     }
   }
 
@@ -7219,6 +7312,9 @@
     $("#save-project-button").addEventListener("click", saveProjectNow);
     $("#rename-project-button").addEventListener("click", renameProject);
     $("#new-project-button").addEventListener("click", createProject);
+    $("#switch-user-button").addEventListener("click", switchUser);
+    $("#login-taylor-button").addEventListener("click", () => selectUser("taylor"));
+    $("#login-guest-button").addEventListener("click", () => selectUser("guest"));
     sampleInput.addEventListener("change", () => loadSample(sampleInput.files?.[0]));
     $("#import-drum-sounds-button").addEventListener("click", () => drumSamplesInput.click());
     drumSamplesInput.addEventListener("change", () => importDrumSamples(Array.from(drumSamplesInput.files || [])));
@@ -7368,12 +7464,13 @@
   }
 
   function initialize() {
+    state.currentUser = getSessionUser();
     state.tracks = makeTracks();
     const initialPattern = makePatternSnapshot(makeId(), "Pattern 1");
     state.patterns = [initialPattern];
     state.selectedPatternId = initialPattern.id;
     initializeProjects();
-    restoreState();
+    if (state.currentUser) restoreState();
     ensureMels();
     tempoValue.textContent = String(state.bpm);
     swingSlider.value = String(state.swing);
@@ -7388,8 +7485,21 @@
     state.arrangementCursor = Math.min(state.arrangementCursor, state.arrangementBars - 0.001);
     setWorkspaceView(state.view, true);
     bindEvents();
+    $("#login-screen").hidden = Boolean(state.currentUser);
+    $("#active-user-label").textContent = state.currentUser === "taylor" ? "Taylor" : "Guest";
   }
 
   initialize();
-  restoreArrangement();
+  if (state.currentUser) {
+    restoreArrangement();
+    try {
+      if (window.sessionStorage.getItem(OPEN_PROJECTS_KEY) === "true") {
+        window.sessionStorage.removeItem(OPEN_PROJECTS_KEY);
+        renderProjectList();
+        $("#project-dialog").showModal();
+      }
+    } catch (error) {
+      showToast(`Could not open the project list: ${error.message || "session storage is unavailable"}`);
+    }
+  }
 })();
