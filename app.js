@@ -1348,7 +1348,8 @@
 
   function selectPattern(patternId) {
     const pattern = getPattern(patternId);
-    if (!pattern || pattern.id === state.selectedPatternId) return;
+    if (!pattern) return;
+    if (pattern.id === state.selectedPatternId) return;
     if (state.keyboardRecording?.mode === "sequencer") stopPlayback();
     state.selectedStepCells.clear();
     captureCurrentPattern();
@@ -1362,7 +1363,7 @@
     saveState();
   }
 
-  function createPattern() {
+  function createPattern(showNotification = true, selectCreated = true) {
     captureCurrentPattern();
     const source = getPattern();
     if (!source) return;
@@ -1378,17 +1379,20 @@
       variants: { ...source.variants },
       gridResolution: getPatternGridResolution(source),
     };
-    state.selectedStepCells.clear();
     state.patterns.push(pattern);
-    applyPattern(pattern);
-    state.selectedPreset = null;
-    renderTracks();
+    if (selectCreated) {
+      state.selectedStepCells.clear();
+      applyPattern(pattern);
+      state.selectedPreset = null;
+      renderTracks();
+    }
     renderPresets();
     renderPatternSelectors();
     updateArrangementLength();
     if (isSongWorkspace()) renderArrangement();
     saveState();
-    showToast(`${pattern.name} created from the selected pattern`);
+    if (showNotification) showToast(`${pattern.name} created from the selected pattern`);
+    return pattern;
   }
 
   function renamePattern() {
@@ -2716,20 +2720,25 @@
     }
     content.append(ruler);
 
-    const arrangedPatternIds = new Set(state.patternClips.map((clip) => clip.patternId));
+    const arrangedPatternIds = new Set(state.patternClips.map((clip) => clip.trackId || clip.patternId));
     const patternTracks = state.patterns.filter((pattern) =>
       pattern.id === state.selectedPatternId || arrangedPatternIds.has(pattern.id));
     patternTracks.forEach((pattern) => {
       const label = document.createElement("div");
-      label.className = "arrangement-label";
+      label.className = `arrangement-label${state.selectedMixerTrackId === pattern.id ? " is-track-selected" : ""}`;
+      label.dataset.trackId = pattern.id;
       label.style.setProperty("--track-color", pattern.color || "var(--accent)");
       label.innerHTML = `<span class="track-color"></span><div class="arrangement-label-info"><div class="arrangement-label-name"></div><div class="arrangement-label-type">Beat pattern · ${getPatternTrackIds(pattern).length} instruments</div></div>`;
       label.querySelector(".arrangement-label-name").textContent = pattern.name;
+      label.addEventListener("click", () => {
+        selectPattern(pattern.id);
+        selectArrangementTrack(pattern.id);
+      });
       labels.append(label);
 
       const lane = createTimelineLane(`pattern:${pattern.id}`, width);
       state.patternClips
-        .filter((clip) => clip.patternId === pattern.id)
+        .filter((clip) => (clip.trackId || clip.patternId) === pattern.id)
         .forEach((clip) => lane.append(createPatternClip(clip)));
       content.append(lane);
     });
@@ -3091,13 +3100,14 @@
     });
   }
 
-  function addPatternClip(startBar = state.arrangementCursor, patternId = state.selectedPatternId) {
+  function addPatternClip(startBar = state.arrangementCursor, patternId = state.selectedPatternId, trackId = patternId) {
     const pattern = getPattern(patternId);
     if (!pattern) return;
     const durationBars = pattern.steps / 16;
     state.patternClips.push({
       id: makeId(),
       patternId: pattern.id,
+      trackId,
       repeatCount: 1,
       sourceOffsetBars: 0,
       startBar: clampArrangementStart(startBar, durationBars),
@@ -3111,7 +3121,7 @@
 
   function addMelTrack(melId, startBar) {
     const mel = getMel(melId);
-    if (!mel) return;
+    if (!mel) return null;
     const track = {
       id: makeId(),
       name: mel.name,
@@ -3127,6 +3137,7 @@
     };
     state.melTracks.push(track);
     addMelClip(mel.id, track.id, startBar);
+    return track;
   }
 
   function addMelClip(melId, trackId, startBar) {
@@ -3187,12 +3198,13 @@
     moveMelClip(clip.id, source.id, destination.id, startBar);
   }
 
-  function movePatternClip(clipId, startBar) {
+  function movePatternClip(clipId, startBar, trackId) {
     const clip = state.patternClips.find((item) => item.id === clipId);
     if (!clip) return;
     const pattern = getPattern(clip.patternId);
     if (!pattern) return;
     clip.startBar = clampArrangementStart(startBar, getArrangementClipDuration("pattern", clip));
+    if (state.patterns.some((item) => item.id === trackId)) clip.trackId = trackId;
     state.patternClips.sort((left, right) => left.startBar - right.startBar);
     updateArrangementLength();
     renderArrangement();
@@ -3259,11 +3271,12 @@
         return;
       }
       if (isPatternLane) {
+        const patternTrackId = trackId.slice("pattern:".length);
         const patternSource = event.dataTransfer?.getData("application/x-pulsegrid-pattern-source");
         if (patternSource) {
           try {
             const { patternId } = JSON.parse(patternSource);
-            addPatternClip(startBar, patternId);
+            addPatternClip(startBar, patternId, patternTrackId);
           } catch {
             showToast("That pattern could not be added.");
           }
@@ -3273,7 +3286,7 @@
         if (!patternTransfer) return;
         try {
           const { clipId } = JSON.parse(patternTransfer);
-          movePatternClip(clipId, startBar);
+          movePatternClip(clipId, startBar, patternTrackId);
         } catch {
           showToast("That drum pattern could not be moved.");
         }
@@ -3909,7 +3922,15 @@
         showToast("Add steps to the pattern before placing it in Track View.");
         return;
       }
-      addPatternClip(state.arrangementCursor, pattern.id);
+      const selectedPatternTrack = state.patterns.find((item) => item.id === state.selectedMixerTrackId);
+      let destinationTrackId = selectedPatternTrack?.id;
+      if (!destinationTrackId) {
+        const newTrackPattern = createPattern(false, false);
+        if (!newTrackPattern) return;
+        destinationTrackId = newTrackPattern.id;
+      }
+      addPatternClip(state.arrangementCursor, pattern.id, destinationTrackId);
+      selectArrangementTrack(destinationTrackId);
       return;
     }
     if (state.view === "piano-roll") {
@@ -3919,7 +3940,13 @@
         showToast("Add notes to the Piano Roll before placing it in Track View.");
         return;
       }
-      addMelTrack(mel.id, state.arrangementCursor);
+      const selectedMelTrack = state.melTracks.find((track) => track.id === state.selectedMixerTrackId);
+      if (selectedMelTrack) {
+        addMelClip(mel.id, selectedMelTrack.id, state.arrangementCursor);
+      } else {
+        const newMelTrack = addMelTrack(mel.id, state.arrangementCursor);
+        if (newMelTrack) selectArrangementTrack(newMelTrack.id);
+      }
     }
   }
 
@@ -5362,6 +5389,7 @@
             return {
               id: clip.id,
               patternId,
+              trackId: state.patterns.some((item) => item.id === clip.trackId) ? clip.trackId : patternId,
               repeatCount,
               ...(Number.isFinite(clip.durationBars) ? { durationBars } : {}),
               sourceOffsetBars: Number.isFinite(clip.sourceOffsetBars) ? Math.max(0, clip.sourceOffsetBars) : 0,
