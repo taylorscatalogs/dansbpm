@@ -219,6 +219,7 @@
     melTracks: [],
     pianoNotes: [],
     pianoStartBar: 0,
+    pianoCursorTick: 0,
     pianoBars: 4,
     pianoSnap: 2,
     pianoNoteLength: 2,
@@ -256,6 +257,7 @@
     playbackEndTime: 0,
     selectedPreset: "warehouse",
     isPlaying: false,
+    playbackMode: "arrangement",
     isExporting: false,
     metronome: false,
     currentStep: -1,
@@ -741,6 +743,72 @@
     return `${names[midi % 12]}${Math.floor(midi / 12) - 1}`;
   }
 
+  function updatePianoPlayhead() {
+    const marker = $("#piano-roll-playhead");
+    if (!marker) return;
+    const maxTick = state.pianoBars * PIANO_TICKS_PER_BAR;
+    const visibleTick = Math.max(0, Math.min(maxTick - 0.001, state.pianoCursorTick));
+    marker.style.left = `${visibleTick * 16}px`;
+    marker.setAttribute("aria-valuenow", visibleTick.toFixed(2));
+  }
+
+  function updatePianoCursorFromTime(startTime) {
+    if (!state.audioContext) return;
+    const mel = getMel();
+    const loopTicks = Math.max(1, (mel ? getMelLengthBars(mel) : 1) * PIANO_TICKS_PER_BAR);
+    const elapsedTicks = Math.max(0, state.audioContext.currentTime - startTime) / (240 / state.bpm) * PIANO_TICKS_PER_BAR;
+    state.pianoCursorTick = elapsedTicks % loopTicks;
+    updatePianoPlayhead();
+  }
+
+  function setPianoCursorTick(tick, seek = true, persist = true) {
+    const maxTick = state.pianoBars * PIANO_TICKS_PER_BAR;
+    state.pianoCursorTick = Math.max(0, Math.min(maxTick - 0.001, tick));
+    updatePianoPlayhead();
+    if (seek && state.audioContext) {
+      const mel = getMel();
+      const loopTicks = Math.max(1, (mel ? getMelLengthBars(mel) : 1) * PIANO_TICKS_PER_BAR);
+      const cursorTick = state.pianoCursorTick % loopTicks;
+      const now = state.audioContext.currentTime;
+      const startTime = now + 0.04 - cursorTick / PIANO_TICKS_PER_BAR * (240 / state.bpm);
+      const player = state.workspacePlayers["piano-roll"];
+      if (player) {
+        player.startTime = startTime;
+        player.nextStepTime = now + 0.04;
+        player.stepIndex = Math.floor(cursorTick) % PIANO_TICKS_PER_BAR;
+        player.scheduledMelNotes.clear();
+      }
+      if (state.isPlaying && state.playbackMode === "piano-roll") {
+        state.playbackStartTime = startTime;
+        state.nextStepTime = now + 0.04;
+        state.stepIndex = Math.floor(cursorTick) % PIANO_TICKS_PER_BAR;
+        state.scheduledPianoNotes.clear();
+      }
+    }
+    if (persist) saveState();
+  }
+
+  function startPianoPlayheadDrag(event) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const grid = $("#piano-roll-grid");
+    const update = (moveEvent) => {
+      const tick = (moveEvent.clientX - grid.getBoundingClientRect().left) / 16;
+      setPianoCursorTick(tick, true, false);
+    };
+    const finish = () => {
+      document.removeEventListener("pointermove", update);
+      document.removeEventListener("pointerup", finish);
+      document.removeEventListener("pointercancel", finish);
+      saveState();
+    };
+    update(event);
+    document.addEventListener("pointermove", update);
+    document.addEventListener("pointerup", finish);
+    document.addEventListener("pointercancel", finish);
+  }
+
   function renderPianoRoll() {
     $("#piano-bars-select").value = String(state.pianoBars);
     $("#piano-snap-select").value = String(state.pianoSnap);
@@ -757,6 +825,26 @@
     ruler.style.width = `${width}px`;
     grid.style.width = `${width}px`;
     grid.style.height = `${height}px`;
+    let playhead = $("#piano-roll-playhead");
+    if (!playhead) {
+      playhead = document.createElement("button");
+      playhead.id = "piano-roll-playhead";
+      playhead.className = "piano-roll-playhead";
+      playhead.type = "button";
+      playhead.setAttribute("role", "slider");
+      playhead.setAttribute("tabindex", "0");
+      playhead.setAttribute("aria-label", "Piano Roll playhead");
+      playhead.setAttribute("aria-valuemin", "0");
+      playhead.addEventListener("pointerdown", startPianoPlayheadDrag);
+      playhead.addEventListener("keydown", (event) => {
+        if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setPianoCursorTick(state.pianoCursorTick + (event.key === "ArrowRight" ? state.pianoSnap : -state.pianoSnap));
+      });
+      $(".piano-roll-editor").append(playhead);
+    }
+    playhead.setAttribute("aria-valuemax", String(totalTicks));
     for (let bar = 0; bar < state.pianoBars; bar += 1) {
       const marker = document.createElement("div");
       marker.className = "piano-roll-bar";
@@ -814,6 +902,7 @@
         element.addEventListener("pointerdown", (event) => startPianoNoteEdit(event, note, event.target === resize));
         grid.append(element);
       });
+      updatePianoPlayhead();
   }
 
   function addPianoNoteFromPointer(event) {
@@ -1560,7 +1649,7 @@
       state.keyboardRecording = { mode, targetId };
       updateKeyboardRecordButtons();
       if (mode === "sequencer") renderTracks();
-      await startPlayback();
+      await startPlayback(mode);
       if (!state.isPlaying) {
         state.keyboardRecording = null;
         updateKeyboardRecordButtons();
@@ -1597,7 +1686,7 @@
         renderPianoRoll();
         state.keyboardRecording = { mode: "piano-roll", targetId: mel.id };
         updateKeyboardRecordButtons();
-        await startPlayback();
+        await startPlayback("piano-roll");
         if (!state.isPlaying) {
           state.keyboardRecording = null;
           stopRecordingMetronome();
@@ -1761,8 +1850,9 @@
   }
 
   function scheduler() {
-    const arrangementPlayback = state.view === "arrangement" || state.view === "mixer";
-    const pianoLoopPlayback = state.view === "piano-roll";
+    const arrangementPlayback = state.playbackMode === "arrangement";
+    const sequencerPlayback = state.playbackMode === "sequencer";
+    const pianoLoopPlayback = state.playbackMode === "piano-roll";
     if (arrangementPlayback && state.isPlaying) {
       if (state.audioContext.currentTime >= state.playbackEndTime) {
         stopPlayback();
@@ -1772,6 +1862,7 @@
       state.arrangementCursor = Math.min(state.arrangementBars, state.playbackStartBar + elapsed / (240 / state.bpm));
       updateArrangementCursorMarker();
     }
+    if (pianoLoopPlayback && state.isPlaying) updatePianoCursorFromTime(state.playbackStartTime);
     const lookAhead = 0.12;
     while (
       state.nextStepTime < state.audioContext.currentTime + lookAhead &&
@@ -1786,7 +1877,7 @@
         if (state.metronome && state.recordingMetronomeTimer === null && clockStep % 8 === 0) {
           triggerClick(state.nextStepTime + swingOffset, clockStep % 32 === 0);
         }
-      } else if (state.view === "sequencer") {
+      } else if (sequencerPlayback) {
         const pattern = getPattern();
         const gridStepCount = getGridStepCount(pattern);
         const ticksPerGridStep = getGridTicksPerStep(pattern);
@@ -1853,10 +1944,11 @@
 
   function updateWorkspacePlayButton(workspace, playing) {
     const button = $(`#${WORKSPACE_PLAY_BUTTONS[workspace]}`);
-    button.textContent = playing ? "Stop" : "Play";
+    const label = playing ? "Stop" : "Play";
+    button.querySelector(".workspace-play-label").textContent = label;
     button.setAttribute("aria-label", `${playing ? "Stop" : "Play"} ${workspace === "piano-roll" ? "piano roll" : workspace} workspace`);
     button.setAttribute("aria-pressed", String(playing));
-    button.classList.toggle("is-active", playing);
+    button.classList.toggle("is-playing", playing);
   }
 
   function stopWorkspacePlayback(workspace) {
@@ -1896,7 +1988,16 @@
       await ensureAudio();
       if (state.workspacePlayers[workspace] !== player) return;
       player.startTime = state.audioContext.currentTime + 0.04;
-      player.nextStepTime = player.startTime;
+      if (workspace === "piano-roll") {
+        const mel = getMel();
+        const loopTicks = mel ? getMelLengthBars(mel) * PIANO_TICKS_PER_BAR : PIANO_TICKS_PER_BAR;
+        const cursorTick = state.pianoCursorTick % loopTicks;
+        player.startTime -= cursorTick / PIANO_TICKS_PER_BAR * (240 / state.bpm);
+        player.nextStepTime = state.audioContext.currentTime + 0.04;
+        player.stepIndex = Math.floor(cursorTick) % PIANO_TICKS_PER_BAR;
+      } else {
+        player.nextStepTime = player.startTime;
+      }
       updateTrackGains();
       updateWorkspacePlayButton(workspace, true);
       workspacePlaybackScheduler(workspace);
@@ -1934,6 +2035,7 @@
         }
       } else {
         scheduleWorkspaceMelLoop(player, now, lookAhead);
+        updatePianoCursorFromTime(player.startTime);
       }
       if (state.metronome && state.recordingMetronomeTimer === null && clockStep % 8 === 0) {
         triggerClick(player.nextStepTime, clockStep % 32 === 0);
@@ -2363,7 +2465,7 @@
       return pattern ? Math.max(end, clip.startBar + pattern.steps / 16 * (clip.repeatCount || 1)) : end;
     }, Math.max(32, melEnd)));
     state.arrangementBars = Math.min(MAX_ARRANGEMENT_BARS, Math.max(state.arrangementBars, Math.ceil(clipEnd)));
-    if (state.playbackStartTime && state.isPlaying && (state.view === "arrangement" || state.view === "mixer")) {
+    if (state.playbackStartTime && state.isPlaying && state.playbackMode === "arrangement") {
       state.playbackEndTime = state.playbackStartTime + (state.arrangementBars - state.playbackStartBar) * secondsPerBar;
     }
     $("#arrangement-bar-label").textContent = `${state.arrangementBars} BARS`;
@@ -3019,6 +3121,18 @@
     });
     const cursor = document.createElement("div");
     cursor.className = "arrangement-cursor";
+    cursor.setAttribute("role", "slider");
+    cursor.setAttribute("tabindex", "0");
+    cursor.setAttribute("aria-label", "Track View playhead");
+    cursor.setAttribute("aria-valuemin", "0");
+    cursor.setAttribute("aria-valuemax", String(MAX_ARRANGEMENT_BARS));
+    cursor.addEventListener("pointerdown", (event) => startArrangementCursorDrag(event, lane));
+    cursor.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setArrangementCursor(state.arrangementCursor + (event.key === "ArrowRight" ? 0.25 : -0.25));
+    });
     lane.append(cursor);
     return lane;
   }
@@ -3026,6 +3140,26 @@
   function barAtPointer(event, lane) {
     const bar = Math.floor((event.clientX - lane.getBoundingClientRect().left) / BAR_WIDTH);
     return Math.max(0, Math.min(MAX_ARRANGEMENT_BARS - 1, bar));
+  }
+
+  function startArrangementCursorDrag(event, lane) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const update = (moveEvent) => {
+      const bar = (moveEvent.clientX - lane.getBoundingClientRect().left) / BAR_WIDTH;
+      setArrangementCursor(bar, false);
+    };
+    const finish = () => {
+      document.removeEventListener("pointermove", update);
+      document.removeEventListener("pointerup", finish);
+      document.removeEventListener("pointercancel", finish);
+      saveState();
+    };
+    update(event);
+    document.addEventListener("pointermove", update);
+    document.addEventListener("pointerup", finish);
+    document.addEventListener("pointercancel", finish);
   }
 
   function createAudioClip(track, clip) {
@@ -3211,14 +3345,16 @@
   function updateArrangementCursorMarker() {
     document.querySelectorAll(".arrangement-cursor").forEach((marker) => {
       marker.style.left = `${state.arrangementCursor * BAR_WIDTH}px`;
+      marker.setAttribute("aria-valuenow", state.arrangementCursor.toFixed(2));
+      marker.setAttribute("aria-valuemax", String(state.arrangementBars));
     });
   }
 
-  function setArrangementCursor(bar) {
-    if (state.isPlaying) stopPlayback();
-    state.arrangementCursor = Math.max(0, Math.min(state.arrangementBars - 1, Math.floor(bar)));
+  function setArrangementCursor(bar, persist = true) {
+    if (state.isPlaying && state.playbackMode === "arrangement") stopPlayback();
+    state.arrangementCursor = Math.max(0, Math.min(state.arrangementBars - 0.001, bar));
     updateArrangementCursorMarker();
-    saveState();
+    if (persist) saveState();
   }
 
   function arrangementSelectionKey(type, id) {
@@ -4322,29 +4458,36 @@
     osc.stop(time + 0.035);
   }
 
-  async function startPlayback() {
+  async function startPlayback(mode = "arrangement") {
     if (state.isPlaying || state.isExporting) return;
     try {
       await ensureAudio();
       state.isPlaying = true;
-      const arrangementPlayback = state.view === "arrangement" || state.view === "mixer";
+      state.playbackMode = mode;
+      const arrangementPlayback = mode === "arrangement";
       const startBar = arrangementPlayback ? Math.min(state.arrangementCursor, state.arrangementBars - 1) : 0;
       state.playbackStartBar = startBar;
       state.playbackStartTime = state.audioContext.currentTime + 0.04;
+      if (mode === "piano-roll") {
+        const mel = getMel();
+        const loopTicks = Math.max(1, (mel ? getMelLengthBars(mel) : 1) * PIANO_TICKS_PER_BAR);
+        const cursorTick = state.pianoCursorTick % loopTicks;
+        state.playbackStartTime -= cursorTick / PIANO_TICKS_PER_BAR * (240 / state.bpm);
+      }
       state.playbackEndTime = arrangementPlayback
         ? state.playbackStartTime + (state.arrangementBars - startBar) * (240 / state.bpm)
         : Infinity;
       state.stepIndex = 0;
       state.scheduledPianoNotes.clear();
-      state.nextStepTime = state.playbackStartTime;
+      state.nextStepTime = state.audioContext.currentTime + 0.04;
       updateTrackGains();
       if (arrangementPlayback) scheduleArrangementClips(state.playbackStartTime, startBar);
       scheduler();
       state.schedulerId = window.setInterval(scheduler, 25);
-      playButton.classList.add("is-playing");
-      playButton.setAttribute("aria-label", "Pause");
+      playButton.classList.toggle("is-playing", arrangementPlayback);
+      playButton.setAttribute("aria-label", arrangementPlayback ? "Pause Track View" : "Play Track View");
       $("#now-playing").classList.add("is-live");
-      $("#now-playing").innerHTML = '<span class="live-dot"></span>PLAYING';
+      $("#now-playing").innerHTML = `<span class="live-dot"></span>${arrangementPlayback ? "TRACK VIEW PLAYING" : "KEY RECORDING"}`;
     } catch (error) {
       showToast(error.message || "Audio could not start in this browser.");
     }
@@ -4395,6 +4538,8 @@
   }
 
   function stopPlayback() {
+    const stoppedPlaybackMode = state.playbackMode;
+    if (stoppedPlaybackMode === "piano-roll" && state.isPlaying) updatePianoCursorFromTime(state.playbackStartTime);
     if (state.keyboardRecordingCountdown) cancelKeyboardRecordingCountdown();
     if (state.schedulerId !== null) window.clearInterval(state.schedulerId);
     state.schedulerId = null;
@@ -4405,6 +4550,7 @@
     updateKeyboardRecordButtons();
     if (stoppedRecording?.mode === "sequencer") renderTracks();
     state.isPlaying = false;
+    state.playbackMode = "arrangement";
     state.stepIndex = 0;
     state.stepTimers.forEach((timerId) => window.clearTimeout(timerId));
     state.stepTimers.clear();
@@ -4412,7 +4558,7 @@
       try { source.stop(); } catch { /* The source may have ended between scheduler ticks. */ }
     });
     state.arrangementSources.clear();
-    if (state.view === "arrangement") state.arrangementCursor = 0;
+    if (stoppedPlaybackMode === "arrangement" && state.view === "arrangement") state.arrangementCursor = 0;
     if (state.audioContext) {
       const now = state.audioContext.currentTime;
       state.tracks.forEach((track) => {
@@ -4582,6 +4728,7 @@
       patternClips: state.patternClips.map(({ id, patternId, startBar, repeatCount }) => ({ id, patternId, startBar, repeatCount: repeatCount || 1 })),
       pianoNotes: state.pianoNotes.map((note) => ({ ...note })),
       pianoStartBar: state.pianoStartBar,
+      pianoCursorTick: state.pianoCursorTick,
       pianoBars: state.pianoBars,
       pianoSnap: state.pianoSnap,
       pianoNoteLength: state.pianoNoteLength,
@@ -4746,7 +4893,7 @@
       if (Number.isFinite(saved.swing)) state.swing = Math.max(0, Math.min(45, Math.round(saved.swing)));
       if (Number.isFinite(saved.steps)) state.steps = normalizePatternSteps(saved.steps);
       if (Number.isFinite(saved.arrangementBars)) state.arrangementBars = Math.max(32, Math.min(MAX_ARRANGEMENT_BARS, Math.round(saved.arrangementBars)));
-      if (Number.isFinite(saved.arrangementCursor)) state.arrangementCursor = Math.max(0, Math.min(MAX_ARRANGEMENT_BARS - 1, saved.arrangementCursor));
+      if (Number.isFinite(saved.arrangementCursor)) state.arrangementCursor = Math.max(0, Math.min(state.arrangementBars - 0.001, saved.arrangementCursor));
       if (Number.isFinite(saved.workspaceRatio)) state.workspaceRatio = Math.max(20, Math.min(80, Math.round(saved.workspaceRatio)));
       if (typeof saved.workspaceHidden === "boolean") state.workspaceHidden = saved.workspaceHidden;
       if (typeof saved.trackViewHidden === "boolean") state.trackViewHidden = saved.trackViewHidden;
@@ -4875,6 +5022,7 @@
           });
       }
       if (Number.isFinite(saved.pianoBars) && [1, 2, 4, 8].includes(saved.pianoBars)) state.pianoBars = saved.pianoBars;
+      if (Number.isFinite(saved.pianoCursorTick)) state.pianoCursorTick = Math.max(0, Math.min(state.pianoBars * PIANO_TICKS_PER_BAR - 0.001, saved.pianoCursorTick));
       if (Number.isFinite(saved.pianoStartBar)) state.pianoStartBar = Math.max(0, Math.min(MAX_ARRANGEMENT_BARS - 1, Math.floor(saved.pianoStartBar)));
       if (Number.isInteger(saved.pianoSnap) && [1, 2, 4, 8].includes(saved.pianoSnap)) state.pianoSnap = saved.pianoSnap;
       if (Number.isInteger(saved.pianoNoteLength) && [1, 2, 4, 8].includes(saved.pianoNoteLength)) state.pianoNoteLength = saved.pianoNoteLength;
@@ -5220,8 +5368,11 @@
     document.addEventListener("pointercancel", finishStepPaint);
     playButton.addEventListener("click", () => {
       if (state.keyboardRecordingCountdown) cancelKeyboardRecordingCountdown();
-      else if (state.isPlaying) stopPlayback();
-      else startPlayback();
+      if (state.isPlaying && state.playbackMode === "arrangement") stopPlayback();
+      else {
+        if (state.isPlaying) stopPlayback();
+        startPlayback("arrangement");
+      }
     });
     Object.entries(WORKSPACE_PLAY_BUTTONS).forEach(([workspace, buttonId]) => {
       $(`#${buttonId}`).addEventListener("click", () => toggleWorkspacePlayback(workspace));
@@ -5330,6 +5481,7 @@
     });
     $("#piano-bars-select").addEventListener("change", (event) => {
       state.pianoBars = Number(event.target.value);
+      state.pianoCursorTick = Math.min(state.pianoCursorTick, state.pianoBars * PIANO_TICKS_PER_BAR - 0.001);
       renderPianoRoll();
       saveState();
     });
@@ -5549,8 +5701,11 @@
       if (event.code === "Space" && !isTyping && !isButton && !dialogOpen) {
         event.preventDefault();
         if (state.keyboardRecordingCountdown) cancelKeyboardRecordingCountdown();
-        else if (state.isPlaying) stopPlayback();
-        else startPlayback();
+        if (state.isPlaying && state.playbackMode === "arrangement") stopPlayback();
+        else {
+          if (state.isPlaying) stopPlayback();
+          startPlayback("arrangement");
+        }
       }
       if (!isTyping && !dialogOpen && (event.key === "Delete" || event.key === "Backspace")) {
         if (state.selectedArrangementItems.size) {
@@ -5586,7 +5741,7 @@
     renderTracks();
     renderArrangement();
     renderMelOptions();
-    state.arrangementCursor = Math.min(state.arrangementCursor, state.arrangementBars - 1);
+    state.arrangementCursor = Math.min(state.arrangementCursor, state.arrangementBars - 0.001);
     setWorkspaceView(state.view, true);
     bindEvents();
   }
